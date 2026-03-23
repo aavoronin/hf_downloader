@@ -3,6 +3,7 @@
 # =============================================================================
 # Download all models (set force=True to re-download existing models)
 from HFModelLister import HFModelLister
+from MultipleModelsDownloader import MultipleModelsDownloader
 from download1 import download_stable_fusion_models
 
 ##download_stable_fusion_models(force=False)
@@ -20,11 +21,31 @@ def main():
     #    target_dir="/mnt/d/AIs/Models/mms-tts-rus"
     #)
 
-    start_url = "https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=likes&search=rus"
-    lister = HFModelLister(start_url)
-    lister.fetch_all_pages()
-    lister.show_results()
+    """start_urls = [
+        #"https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=likes&search=rus",
+        "https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=ocr",
+        "https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=eng"
+    ]
+    for start_url in start_urls:
+        lister = HFModelLister(start_url)
+        lister.fetch_all_pages()
+        lister.show_results()
+    """
+    start_urls = [
+        "https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=ocr",
+        "https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=eng"
+    ]
 
+    root_folder = r"D:\AIs\Image-to-Text"
+
+    # Initialize and run downloader
+    downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder)
+
+    # Step 1: Fetch, filter, and save models
+    downloader.process_urls()
+
+    # Step 2: List and display saved local models
+    downloader.print_local_models()
 
 if __name__ == "__main__":
     main()
