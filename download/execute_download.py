@@ -34,6 +34,7 @@ def execute_download():
     downloader.show_results()
     downloader.print_local_models()
     downloader.download_models()
+    downloader.print_download_summary()
 
     start_urls = ["https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=likes&search=ru",
                   "https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=likes"]

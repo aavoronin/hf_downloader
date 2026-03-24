@@ -140,6 +140,93 @@ class MultipleModelsDownloader:
         failed_attempts = model_info.get("failed_attempts", 0)
         return failed_attempts > 5
 
+    def _calculate_folder_stats(self, model_id: str) -> Dict:
+        """
+        Calculate folder statistics: total size in bytes, human-readable size, and file count.
+        Excludes .nach files and model_info.json from calculation.
+
+        Args:
+            model_id: The HuggingFace model ID
+
+        Returns:
+            Dict with 'size', 'size_str', and 'numfiles'
+        """
+        safe_name = model_id.replace("/", "_")
+        model_folder = self.root_folder / safe_name
+
+        total_size = 0
+        num_files = 0
+
+        for file_path in model_folder.rglob("*"):
+            if file_path.is_file():
+                # Exclude .nach files and model_info.json
+                if file_path.name.endswith(".nach") or file_path.name == "model_info.json":
+                    continue
+                total_size += file_path.stat().st_size
+                num_files += 1
+
+        # Create human-readable size string
+        size_str = self._format_size(total_size)
+
+        return {
+            "size": total_size,
+            "size_str": size_str,
+            "numfiles": num_files
+        }
+
+    @staticmethod
+    def _format_size(size_bytes: int) -> str:
+        """
+        Convert bytes to human-readable format (B, KB, MB, GB, TB).
+
+        Args:
+            size_bytes: Size in bytes
+
+        Returns:
+            Human-readable size string
+        """
+        if size_bytes == 0:
+            return "0 B"
+
+        units = ["B", "KB", "MB", "GB", "TB"]
+        unit_index = 0
+        size = float(size_bytes)
+
+        while size >= 1024 and unit_index < len(units) - 1:
+            size /= 1024
+            unit_index += 1
+
+        if unit_index == 0:
+            return f"{int(size)} {units[unit_index]}"
+        else:
+            return f"{size:.2f} {units[unit_index]}"
+
+    def _update_model_info_with_folder_stats(self, model_id: str):
+        """
+        Update model_info.json with folder statistics if they don't exist.
+        Checks for 'size', 'size_str', or 'numfiles' fields.
+        """
+        json_path = self._get_model_json_path(model_id)
+
+        if not json_path.exists():
+            return
+
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                model_info = json.load(f)
+
+            # Check if any of the stats fields are missing
+            if not all(key in model_info for key in ["size", "size_str", "numfiles"]):
+                stats = self._calculate_folder_stats(model_id)
+                model_info.update(stats)
+
+                with open(json_path, "w", encoding="utf-8") as f:
+                    json.dump(model_info, f, indent=2, ensure_ascii=False)
+
+                print(f"✓ Updated {model_id} with folder stats: {stats['size_str']}, {stats['numfiles']} files")
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"✗ Error updating folder stats for {model_id}: {e}")
+
     def process_urls(self):
         """Process all start URLs: fetch, filter, and save qualifying models."""
         for start_url in self.start_urls:
@@ -194,6 +281,8 @@ class MultipleModelsDownloader:
             # Check if download is needed (based on date)
             if not self._needs_download(model_info):
                 print(f"✓ {model_id} already downloaded - skipping")
+                # Update folder stats for previously downloaded models
+                self._update_model_info_with_folder_stats(model_id)
                 continue
 
             # Build target directory path
@@ -214,6 +303,8 @@ class MultipleModelsDownloader:
             if success:
                 # Update model_info.json with download_date and reset attempts
                 self._update_model_info_with_download_date(model_id)
+                # Update folder stats after successful download
+                self._update_model_info_with_folder_stats(model_id)
             else:
                 print(f"✗ Failed to download {model_id}")
                 # Increment failed attempts in config
@@ -282,4 +373,33 @@ class MultipleModelsDownloader:
             if 'failed_attempts' in model:
                 print(f"  Failures:     {model['failed_attempts']}")
 
+            # Print Size if the key exists in the dict
+            if 'size_str' in model:
+                print(f"  Size:         {model['size_str']}")
+
+            # Print NumFiles if the key exists in the dict
+            if 'numfiles' in model:
+                print(f"  Files:        {model['numfiles']}")
+
         print(f"\n📊 Total: {len(local_models)} models")
+
+    def print_download_summary(self):
+        """Print summary of downloaded models sorted by size descending."""
+        local_models = self.list_local_models()
+
+        # Filter models that have calculated sizes
+        models_with_size = [m for m in local_models if 'size' in m]
+
+        # Sort by size descending
+        sorted_models = sorted(models_with_size, key=lambda x: x.get('size', 0), reverse=True)
+
+        print(f"\n{'=' * 60}")
+        print(f"Download Summary (Sorted by Size Desc)")
+        print('=' * 60)
+
+        for model in sorted_models:
+            model_id = model.get('Model ID', 'Unknown')
+            size_str = model.get('size_str', 'Unknown')
+            print(f"{model_id}  {size_str}")
+
+        print(f"\n📊 Total Models with Size Info: {len(sorted_models)}")
