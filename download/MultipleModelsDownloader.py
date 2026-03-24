@@ -254,12 +254,32 @@ class MultipleModelsDownloader:
             return
 
         for model in local_models:
-            print(f"\nModel ID: {model.get('Model ID', 'Unknown')}")
-            print(f"  Purpose:      {model.get('Purpose', '')}")
-            print(f"  Updated:      {model.get('Updated', '')}")
-            print(f"  Downloads:    {model.get('Downloads', 0):,}")
-            print(f"  Likes:        {model.get('Likes', 0):,}")
-            print(f"  Downloaded:   {model.get('download_date', 'Not yet')}")
-            print(f"  Failures:     {model.get('failed_attempts', 0)}")
+            # Print Model ID if it exists and has a value
+            if model.get('Model ID'):
+                print(f"\nModel ID: {model['Model ID']}")
+
+            # Print Purpose if it exists and is not empty
+            if model.get('Purpose'):
+                print(f"  Purpose:      {model['Purpose']}")
+
+            # Print Updated if it exists and is not empty
+            if model.get('Updated'):
+                print(f"  Updated:      {model['Updated']}")
+
+            # Print Downloads if the key exists in the dict
+            if 'Downloads' in model:
+                print(f"  Downloads:    {model['Downloads']:,}")
+
+            # Print Likes if the key exists in the dict
+            if 'Likes' in model:
+                print(f"  Likes:        {model['Likes']:,}")
+
+            # Print Downloaded if it exists and is not empty
+            if model.get('download_date'):
+                print(f"  Downloaded:   {model['download_date']}")
+
+            # Print Failures if the key exists in the dict
+            if 'failed_attempts' in model:
+                print(f"  Failures:     {model['failed_attempts']}")
 
         print(f"\n📊 Total: {len(local_models)} models")
