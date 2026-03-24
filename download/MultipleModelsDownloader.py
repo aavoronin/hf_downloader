@@ -10,7 +10,8 @@ from download.hf_downloader import HFModelDownloader
 class MultipleModelsDownloader:
     """Downloader that uses HFModelLister to fetch, filter, and save model info."""
 
-    def __init__(self, start_urls: List[str], root_folder: str, force_download_all: bool = False):
+    def __init__(self, start_urls: List[str], root_folder: str,
+                 force_download_all: bool = False, exclude: List[str] = []):
         """
         Initialize the downloader.
 
@@ -19,6 +20,7 @@ class MultipleModelsDownloader:
             root_folder: Root directory for storing model info folders
             force_download_all: If True, force redownload all models regardless of download_date
         """
+        self.exclude = exclude
         self.start_urls = start_urls
         self.root_folder = Path(root_folder)
         self.root_folder.mkdir(parents=True, exist_ok=True)
@@ -128,6 +130,11 @@ class MultipleModelsDownloader:
         for model_info in local_models:
             model_id = model_info.get("Model ID", "")
             if not model_id:
+                continue
+
+            # Skip models whose ID is in the exclude list
+            if model_id in self.exclude:
+                print(f"⊘ Excluded: {model_id}")
                 continue
 
             # Check if download is needed

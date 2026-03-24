@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Optional, List, Union
 from huggingface_hub import snapshot_download, login
 
+from download.my_token import load_hf_token
+
 
 class HFModelDownloader:
     """
@@ -52,17 +54,7 @@ class HFModelDownloader:
         if self._token is not None:
             return self._token
 
-        # Try importing from my_token.py
-        try:
-            from my_token import HF_TOKEN
-            if HF_TOKEN and HF_TOKEN != "hf_YOUR_NEW_TOKEN_HERE":
-                self._token = HF_TOKEN
-                return self._token
-        except (ImportError, AttributeError):
-            pass
-
-        # Fallback to environment variable
-        self._token = os.environ.get("HF_TOKEN")
+        self._token = load_hf_token()
         return self._token
 
     def _authenticate(self) -> bool:
