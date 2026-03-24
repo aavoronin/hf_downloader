@@ -1,11 +1,10 @@
 import json
-import os
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 from datetime import datetime
 
-from HFModelLister import HFModelLister
-from hf_downloader import HFModelDownloader
+from download.HFModelLister import HFModelLister
+from download.hf_downloader import HFModelDownloader
 
 
 class MultipleModelsDownloader:
