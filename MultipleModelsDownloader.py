@@ -24,6 +24,7 @@ class MultipleModelsDownloader:
         self.root_folder = Path(root_folder)
         self.root_folder.mkdir(parents=True, exist_ok=True)
         self.force_download_all = force_download_all
+        self.lister = None
 
     @staticmethod
     def _passes_filter(model_info: Dict, min_downloads: int = 100, min_likes: int = 10) -> bool:
@@ -96,13 +97,17 @@ class MultipleModelsDownloader:
             print(f"\nProcessing: {clean_url}")
 
             # Use the existing HFModelLister class
-            lister = HFModelLister(clean_url)
-            lister.fetch_all_pages()
+            self.lister = HFModelLister(clean_url)
+            self.lister.fetch_all_pages()
 
             # Filter and save models that pass the threshold
-            for model_info in lister.results:
+            for model_info in self.lister.results:
                 if self._passes_filter(model_info):
                     self._save_model_info(model_info)
+
+    def show_results(self):
+        if self.lister is not None:
+            self.lister.show_results()
 
     def download_models(self):
         """Download all local models that haven't been downloaded yet."""

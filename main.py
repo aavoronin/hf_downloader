@@ -39,17 +39,30 @@ def main():
     ]
 
     root_folder = r"D:\AIs\Image-to-Text"
-
-    # Initialize and run downloader
     downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder)
-
-    # Step 1: Fetch, filter, and save models
     downloader.process_urls()
-
-    # Step 2: List and display saved local models
+    downloader.show_results()
     downloader.print_local_models()
-
     downloader.download_models()
 
+
+    start_urls = ["https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=likes&search=ru",
+     "https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=likes"]
+
+    root_folder = r"D:\AIs\Automatic Speech Recognition"
+    downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder)
+    downloader.process_urls()
+    downloader.show_results()
+    downloader.print_local_models()
+    downloader.download_models()
+
+    start_urls = ["https://huggingface.co/models?pipeline_tag=image-text-to-image&sort=likes"]
+    root_folder = r"D:\AIs\Image-Text-to-Image"
+
+    downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder)
+    downloader.process_urls()
+    downloader.show_results()
+    downloader.print_local_models()
+    downloader.download_models()
 if __name__ == "__main__":
     main()
