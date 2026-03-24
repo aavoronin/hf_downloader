@@ -5,6 +5,7 @@ import re
 
 
 class HFModelLister:
+    MAX_PAGES = 5  # Maximum pages to fetch per URL
     def __init__(self, base_url, token=None):
         self.print_html = False
         self.base_url = base_url
@@ -140,7 +141,7 @@ class HFModelLister:
 
     def fetch_all_pages(self):
         page = 0
-        while True:
+        while page < self.MAX_PAGES:  # Use constant instead of hardcoded 20
             url = self.base_url if page == 0 else f"{self.base_url}&p={page}"
             print(f"Fetching page {page} -> {url}")
             has_results = self.parse_page(url)

@@ -32,8 +32,10 @@ def main():
         lister.show_results()
     """
     start_urls = [
-        "https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=ocr",
-        "https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=eng"
+        #"https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=ocr",
+        #"https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=eng"
+        "https://huggingface.co/models?pipeline_tag=image-to-text&sort=likes&search=ru",
+        "https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending"
     ]
 
     root_folder = r"D:\AIs\Image-to-Text"
@@ -46,6 +48,8 @@ def main():
 
     # Step 2: List and display saved local models
     downloader.print_local_models()
+
+    downloader.download_models()
 
 if __name__ == "__main__":
     main()
