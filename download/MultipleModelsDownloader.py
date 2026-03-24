@@ -44,19 +44,21 @@ class MultipleModelsDownloader:
         likes = model_info.get("Likes", 0)
         return downloads > min_downloads or likes > min_likes
 
+    def _get_model_json_path(self, model_id: str) -> Path:
+        """Helper to get the path to the model_info.json file."""
+        safe_name = model_id.replace("/", "_")
+        model_folder = self.root_folder / safe_name
+        return model_folder / "model_info.json"
+
     def _save_model_info(self, model_info: Dict):
         """Save model info to a JSON file in a subfolder. Does not override if file exists."""
         model_id = model_info.get("Model ID", "")
         if not model_id:
             return
 
-        # Create safe folder name from model ID (handle org/model format)
-        safe_name = model_id.replace("/", "_")
-        model_folder = self.root_folder / safe_name
+        json_path = self._get_model_json_path(model_id)
+        model_folder = json_path.parent
         model_folder.mkdir(parents=True, exist_ok=True)
-
-        # Save JSON config file - only if it doesn't already exist
-        json_path = model_folder / "model_info.json"
 
         if json_path.exists():
             print(f"⊘ Skipped (exists): {model_id}")
@@ -67,22 +69,61 @@ class MultipleModelsDownloader:
 
         print(f"✓ Saved: {model_id}")
 
-    def _update_model_info_with_download_date(self, model_info: Dict):
-        """Update model_info.json with download_date after successful download."""
-        model_id = model_info.get("Model ID", "")
-        if not model_id:
+    def _update_model_config(self, model_id: str, updates: Dict):
+        """
+        Generic helper to update the model_info.json with specific fields.
+
+        Args:
+            model_id: The HuggingFace model ID
+            updates: Dictionary of fields to update/add
+        """
+        json_path = self._get_model_json_path(model_id)
+
+        if not json_path.exists():
             return
 
-        safe_name = model_id.replace("/", "_")
-        model_folder = self.root_folder / safe_name
-        json_path = model_folder / "model_info.json"
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                model_info = json.load(f)
 
-        if json_path.exists():
-            # Add or update download_date
-            model_info["download_date"] = datetime.now().isoformat()
+            model_info.update(updates)
+
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(model_info, f, indent=2, ensure_ascii=False)
-            print(f"✓ Updated {model_id} with download_date")
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"✗ Error updating config for {model_id}: {e}")
+
+    def _update_model_info_with_download_date(self, model_id: str):
+        """Update model_info.json with download_date and reset failed_attempts on success."""
+        updates = {
+            "download_date": datetime.now().isoformat(),
+            "failed_attempts": 0
+        }
+        self._update_model_config(model_id, updates)
+        print(f"✓ Updated {model_id} with download_date and reset failed_attempts")
+
+    def _increment_failed_attempts(self, model_id: str):
+        """Increment the failed_attempts counter in the config file."""
+        json_path = self._get_model_json_path(model_id)
+
+        if not json_path.exists():
+            return
+
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                model_info = json.load(f)
+
+            current_attempts = model_info.get("failed_attempts", 0)
+            new_attempts = current_attempts + 1
+
+            model_info["failed_attempts"] = new_attempts
+
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(model_info, f, indent=2, ensure_ascii=False)
+
+            print(f"⚠ Failed attempts for {model_id} incremented to {new_attempts}")
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"✗ Error updating failed_attempts for {model_id}: {e}")
 
     def _needs_download(self, model_info: Dict) -> bool:
         """Check if model needs to be downloaded based on download_date."""
@@ -90,6 +131,14 @@ class MultipleModelsDownloader:
             return True
         # If no download_date, needs download
         return "download_date" not in model_info
+
+    def _is_blocked_by_failures(self, model_info: Dict) -> bool:
+        """Check if model should be skipped due to too many failed attempts."""
+        if self.force_download_all:
+            return False
+
+        failed_attempts = model_info.get("failed_attempts", 0)
+        return failed_attempts > 5
 
     def process_urls(self):
         """Process all start URLs: fetch, filter, and save qualifying models."""
@@ -137,7 +186,12 @@ class MultipleModelsDownloader:
                 print(f"⊘ Excluded: {model_id}")
                 continue
 
-            # Check if download is needed
+            # Check if blocked by failed attempts (> 5)
+            if self._is_blocked_by_failures(model_info):
+                print(f"⊘ Skipped (failed_attempts > 5): {model_id}")
+                continue
+
+            # Check if download is needed (based on date)
             if not self._needs_download(model_info):
                 print(f"✓ {model_id} already downloaded - skipping")
                 continue
@@ -158,10 +212,12 @@ class MultipleModelsDownloader:
             )
 
             if success:
-                # Update model_info.json with download_date
-                self._update_model_info_with_download_date(model_info)
+                # Update model_info.json with download_date and reset attempts
+                self._update_model_info_with_download_date(model_id)
             else:
                 print(f"✗ Failed to download {model_id}")
+                # Increment failed attempts in config
+                self._increment_failed_attempts(model_id)
 
     def list_local_models(self) -> List[Dict]:
         """
@@ -204,5 +260,6 @@ class MultipleModelsDownloader:
             print(f"  Downloads:    {model.get('Downloads', 0):,}")
             print(f"  Likes:        {model.get('Likes', 0):,}")
             print(f"  Downloaded:   {model.get('download_date', 'Not yet')}")
+            print(f"  Failures:     {model.get('failed_attempts', 0)}")
 
         print(f"\n📊 Total: {len(local_models)} models")
