@@ -45,9 +45,12 @@ def execute_download():
     downloader.show_results()
     downloader.print_local_models()
     downloader.download_models()
+    downloader.print_download_summary()
 
     start_urls = ["https://huggingface.co/models?pipeline_tag=image-text-to-image&sort=likes"]
-    exclude = ["Arunk25/Qwen-Image-Edit-Rapid-AIO-GGUF"]
+    exclude = ["Arunk25/Qwen-Image-Edit-Rapid-AIO-GGUF",
+               "liuxin9494/Qwen-Image-Edit-Rapid-AIO-GGUF-mirror"]
+    exclude = []
     root_folder = r"D:\AIs\Image-Text-to-Image"
 
     downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder,
@@ -56,3 +59,4 @@ def execute_download():
     downloader.show_results()
     downloader.print_local_models()
     downloader.download_models()
+    downloader.print_download_summary()

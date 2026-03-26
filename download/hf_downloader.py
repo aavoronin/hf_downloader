@@ -2,9 +2,11 @@
 import os
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Union
-from huggingface_hub import snapshot_download, login
+from huggingface_hub import snapshot_download, login, list_repo_refs, HfApi
+from packaging import version as pkg_version
 
 from download.my_token import load_hf_token
 
@@ -129,6 +131,115 @@ class HFModelDownloader:
             return size_gb
         return None
 
+    def _get_best_revision(self, model_id: str, repo_type: str = "model") -> Optional[str]:
+        """
+        Find the best revision (git tag) to download for a model.
+
+        Looks for semantic version tags (e.g., v23, v11.1, 1.2.3) and returns
+        the highest version. Returns None if no valid version tags found.
+
+        Args:
+            model_id: HuggingFace repository ID
+            repo_type: Type of repo ("model", "dataset", or "space")
+
+        Returns:
+            str: Best revision name to use, or None to use default
+        """
+        try:
+            refs = list_repo_refs(repo_id=model_id, repo_type=repo_type)
+        except Exception as e:
+            self._log(f"  ⚠ Could not fetch revisions for {model_id}: {e}")
+            return None
+
+        if not refs or not refs.tags:
+            self._log(f"  ℹ No git tags found for {model_id}")
+            return None
+
+        # Flexible pattern to match version tags:
+        # v23, v11.1, 1.2.3, v18.1-rc1, etc.
+        version_pattern = re.compile(r'^v?(\d+(?:\.\d+)*(?:[-+].*)?)$', re.IGNORECASE)
+        valid_versions = []
+
+        for tag in refs.tags:
+            tag_name = tag.name
+            match = version_pattern.match(tag_name)
+            if match:
+                try:
+                    ver = pkg_version.parse(tag_name)
+                    valid_versions.append((ver, tag_name))
+                except Exception:
+                    continue
+
+        if not valid_versions:
+            self._log(f"  ℹ No valid version tags found for {model_id}")
+            return None
+
+        # Sort by version (highest first) and return the tag name
+        valid_versions.sort(key=lambda x: x[0], reverse=True)
+        best_tag = valid_versions[0][1]
+        self._log(f"  ℹ Found version tags, selecting latest: {best_tag}")
+        return best_tag
+
+    def _get_latest_version_files(self, model_id: str, repo_type: str = "model") -> Optional[List[str]]:
+        """
+        Find files with the highest version number in their filenames.
+
+        This handles cases where versions are in file names (not git tags).
+        E.g., model-v23.gguf, model-v22.gguf, etc.
+
+        Args:
+            model_id: HuggingFace repository ID
+            repo_type: Type of repo
+
+        Returns:
+            List of filenames with the highest version, or None if no versioned files found
+        """
+        try:
+            api = HfApi()
+            files = api.list_repo_files(repo_id=model_id, repo_type=repo_type)
+        except Exception as e:
+            self._log(f"  ⚠ Could not list files for {model_id}: {e}")
+            return None
+
+        if not files:
+            return None
+
+        # Pattern to find version numbers in filenames
+        # Matches: v23, v11.1, v1.2.3, -v5, _v18.1, etc.
+        version_in_filename = re.compile(r'[-_]?v?(\d+(?:\.\d+)*)(?=[-_\.]|$)', re.IGNORECASE)
+
+        versioned_files = []
+
+        for filename in files:
+            # Skip metadata files
+            if filename in ['.gitattributes', 'README.md', 'config.json', 'model_index.json']:
+                continue
+
+            match = version_in_filename.search(filename)
+            if match:
+                try:
+                    ver_str = match.group(1)
+                    ver = pkg_version.parse(ver_str)
+                    versioned_files.append((ver, filename))
+                except Exception:
+                    continue
+
+        if not versioned_files:
+            self._log(f"  ℹ No versioned files found in {model_id}")
+            return None
+
+        # Find the highest version
+        versioned_files.sort(key=lambda x: x[0], reverse=True)
+        highest_version = versioned_files[0][0]
+
+        # Get all files with the highest version
+        latest_files = [f[1] for f in versioned_files if f[0] == highest_version]
+
+        self._log(f"  ℹ Found versioned files, highest version: {highest_version}")
+        self._log(f"  ℹ Files to download: {latest_files}")
+
+        return latest_files
+
     def download(self,
                  model_id: str,
                  target_dir: str,
@@ -189,28 +300,53 @@ class HFModelDownloader:
             if create_dir:
                 Path(normalized_dir).mkdir(parents=True, exist_ok=True)
 
-            log(f"  Downloading {label} to: {normalized_dir}")
+            log(f"{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}  Downloading {label} to: {normalized_dir}")
             log(f"  Repo: {model_id}")
+
+            # Strategy 1: Check for git tags first
+            best_revision = self._get_best_revision(model_id)
+
+            # Strategy 2: If no tags, check for versioned files in filenames
+            allow_patterns = None
+            if best_revision is None:
+                latest_files = self._get_latest_version_files(model_id)
+                if latest_files:
+                    allow_patterns = latest_files
+
+            # Prepare kwargs for snapshot_download
+            download_kwargs = {
+                "repo_id": model_id,
+                "local_dir": normalized_dir,
+                "ignore_patterns": ignore_patterns,
+                "force_download": force_redownload,
+                "token": self._get_token()
+            }
+
+            # Only add revision if we found a valid git tag
+            if best_revision is not None:
+                download_kwargs["revision"] = best_revision
+                log(f"  Using git revision: {best_revision}")
+
+            # Only add allow_patterns if we found versioned files
+            if allow_patterns is not None:
+                download_kwargs["allow_patterns"] = allow_patterns
+                log(f"  Using latest version files: {allow_patterns}")
+            else:
+                log(f"  ℹ No version info found - downloading full repo")
 
             start_time = time.time()
 
-            snapshot_download(
-                repo_id=model_id,
-                local_dir=normalized_dir,
-                ignore_patterns=ignore_patterns,
-                force_download=force_redownload,
-                token=self._get_token()
-            )
+            snapshot_download(**download_kwargs)
 
             elapsed = time.time() - start_time
             size_gb = self._get_directory_size_gb(normalized_dir)
 
-            log(f"✓ {label} downloaded successfully ({size_gb:.2f} GB)")
+            log(f"{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')} ✓ {label} downloaded successfully ({size_gb:.2f} GB)")
             log(f"  Time elapsed: {elapsed / 60:.1f} minutes")
             return True
 
         except Exception as e:
-            log(f"✗ {label} download failed: {e}")
+            log(f"{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')} ✗ {label} download failed: {e}")
             return False
 
     def download_batch(self,

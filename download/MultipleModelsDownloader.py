@@ -289,7 +289,7 @@ class MultipleModelsDownloader:
             safe_name = model_id.replace("/", "_")
             target_dir = self.root_folder / safe_name
 
-            print(f"\nDownloading: {model_id}")
+            print(f"\n{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')} Downloading: {model_id}")
             print(f"  Target: {target_dir}")
 
             # Use HFModelDownloader to download the model
@@ -301,12 +301,13 @@ class MultipleModelsDownloader:
             )
 
             if success:
+                print(f"{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')} Downloaded {model_id}")
                 # Update model_info.json with download_date and reset attempts
                 self._update_model_info_with_download_date(model_id)
                 # Update folder stats after successful download
                 self._update_model_info_with_folder_stats(model_id)
             else:
-                print(f"✗ Failed to download {model_id}")
+                print(f"{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')} ✗ Failed to download {model_id}")
                 # Increment failed attempts in config
                 self._increment_failed_attempts(model_id)
 
