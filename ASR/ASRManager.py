@@ -260,7 +260,8 @@ class AutomaticSpeechRecognition:
         if file_path.suffix.lower() in ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v']:
             if moviepy is None:
                 raise ImportError("moviepy is required for video processing. Install with: pip install moviepy")
-            temp_audio = Path(file_path.parent) / f".temp_{file_path.stem}_{hashlib.md5(str(file_path).encode()).hexdigest()[:8]}.wav"
+            temp_audio = Path(
+                file_path.parent) / f".temp_{file_path.stem}_{hashlib.md5(str(file_path).encode()).hexdigest()[:8]}.wav"
             try:
                 video = mp.VideoFileClip(str(file_path))
                 video.audio.write_audiofile(str(temp_audio), verbose=False, logger=None)
@@ -314,9 +315,9 @@ class ASRManager:
         return self.factory.create(model_name)
 
     def apply_all(
-        self,
-        input_paths: Union[str, Path, List[Union[str, Path]]],
-        model_names: Optional[List[str]] = None
+            self,
+            input_paths: Union[str, Path, List[Union[str, Path]]],
+            model_names: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         if model_names is None:
             available = self.factory.list_available_models()
@@ -371,14 +372,17 @@ class ASRManager:
         return stats
 
     def run_test(
-        self,
-        audio_path: str,
-        reference_path: str,
-        model_names: Optional[List[str]] = None
+            self,
+            audio_path: str,
+            reference_path: str,
+            model_names: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         try:
             with open(reference_path, 'r', encoding='utf-8') as f:
                 reference_text = f.read().strip()
+                reference_text = reference_text.replace("\r", " ").replace("\n", " ")
+                for _ in range(10):
+                    reference_text = reference_text.replace("  ", " ")
         except FileNotFoundError:
             print(f"❌ Reference file not found: {reference_path}")
             return []
@@ -402,7 +406,6 @@ class ASRManager:
                     print(f"✗ {model_name}: FAILED to initialize")
                     continue
                 predicted_text = model.process(audio_path)
-                print(predicted_text)
                 elapsed = time.time() - start_time
                 similarity = self._normalized_levenshtein_similarity(reference_text, predicted_text)
                 status = "✓" if similarity > 0.5 else "⚠"
@@ -439,6 +442,7 @@ class ASRManager:
             return 1.0
         if not s1 or not s2:
             return 0.0
+
         def levenshtein_distance(a: str, b: str) -> int:
             if len(a) < len(b):
                 a, b = b, a
@@ -452,6 +456,7 @@ class ASRManager:
                     current_row.append(min(insertions, deletions, substitutions))
                 previous_row = current_row
             return previous_row[-1]
+
         distance = levenshtein_distance(s1.lower(), s2.lower())
         max_len = max(len(s1), len(s2))
         return 1.0 - (distance / max_len)
@@ -462,3 +467,4 @@ def set_device(use_gpu: bool):
     GLOBAL_CONFIG["use_gpu"] = use_gpu
     device = "GPU" if use_gpu else "CPU"
     print(f"🔧 Device set to: {device}")
+
