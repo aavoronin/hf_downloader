@@ -1,3 +1,5 @@
+from typing import List
+
 from download.MultipleModelsDownloader import MultipleModelsDownloader
 
 
@@ -29,23 +31,23 @@ def execute_download():
     ]
 
     root_folder = r"D:\AIs\Image-to-Text"
-    downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder)
-    downloader.process_urls()
-    downloader.show_results()
-    downloader.print_local_models()
-    downloader.download_models()
-    downloader.print_download_summary()
+    download_certain_type_of_models(root_folder, start_urls)
 
     start_urls = ["https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=likes&search=ru",
                   "https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=likes"]
 
     root_folder = r"D:\AIs\Automatic Speech Recognition"
-    downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder)
-    downloader.process_urls()
-    downloader.show_results()
-    downloader.print_local_models()
-    downloader.download_models()
-    downloader.print_download_summary()
+    download_certain_type_of_models(root_folder, start_urls)
+
+    start_urls = ["https://huggingface.co/models?pipeline_tag=text-to-speech&sort=trending&search=rus",
+                  "https://huggingface.co/models?pipeline_tag=text-to-speech&sort=trending"]
+    root_folder = r"D:\AIs\Text-to-Speech"
+    download_certain_type_of_models(root_folder, start_urls)
+
+    start_urls = ["https://huggingface.co/models?pipeline_tag=text-to-audio&sort=trending&search=rus",
+                  "https://huggingface.co/models?pipeline_tag=text-to-audio&sort=trending"]
+    root_folder = r"D:\AIs\Text-to-Audio"
+    download_certain_type_of_models(root_folder, start_urls)
 
     start_urls = ["https://huggingface.co/models?pipeline_tag=image-text-to-image&sort=likes"]
     exclude = ["Arunk25/Qwen-Image-Edit-Rapid-AIO-GGUF",
@@ -55,8 +57,16 @@ def execute_download():
 
     downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder,
                                           exclude = exclude)
+    download_certain_type_of_models(root_folder, start_urls, exclude)
+
+
+def download_certain_type_of_models(root_folder: str, start_urls: list[str], exclude: List[str] = []):
+    downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder,
+                                          exclude = exclude)
     downloader.process_urls()
     downloader.show_results()
     downloader.print_local_models()
     downloader.download_models()
     downloader.print_download_summary()
+    downloader.print_folder_structure()
+

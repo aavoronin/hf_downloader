@@ -404,3 +404,56 @@ class MultipleModelsDownloader:
             print(f"{model_id}  {size_str}")
 
         print(f"\n📊 Total Models with Size Info: {len(sorted_models)}")
+
+    def print_folder_structure(self):
+        """
+        Prints the whole folder structure within the root_folder.
+        Format: Folder --> list of files in the folder --> filesize next to each file.
+        Excludes any files inside .cache directories.
+        """
+        print(f"\n{'=' * 60}")
+        print(f"Folder Structure: {self.root_folder}")
+        print('=' * 60)
+
+        if not self.root_folder.exists():
+            print("Root folder does not exist.")
+            return
+
+        # Get all subdirectories (model folders) sorted by name
+        subfolders = sorted([d for d in self.root_folder.iterdir() if d.is_dir()])
+
+        if not subfolders:
+            print("No subfolders found in root directory.")
+            return
+
+        for folder in subfolders:
+            print(f"\n📂 {folder.name}")
+
+            # Get all files recursively within this model folder, sorted by name
+            # Exclude files where '.cache' appears in any part of the path
+            files = sorted([
+                f for f in folder.rglob("*")
+                if f.is_file() and '.cache' not in f.parts
+                   and 'runs' not in f.parts
+            ])
+
+            if not files:
+                print("   (Empty folder)")
+                continue
+
+            for file_path in files:
+                try:
+                    # Get path relative to the model folder for cleaner display
+                    rel_path = file_path.relative_to(folder)
+                except ValueError:
+                    rel_path = file_path.name
+
+                # Get file size
+                try:
+                    size = file_path.stat().st_size
+                    size_str = self._format_size(size)
+                except (FileNotFoundError, PermissionError):
+                    size_str = "N/A"
+
+                # Display file with relative path and size
+                print(f"   ├── {rel_path} ({size_str})")
