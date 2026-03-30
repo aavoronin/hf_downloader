@@ -237,21 +237,30 @@ class AutomaticSpeechRecognition:
             return
         try:
             processor = AutoProcessor.from_pretrained(str(self.model_path), local_files_only=True)
+            # Fix: Use dtype instead of deprecated torch_dtype
+            model_dtype = torch.float16 if self._device == "cuda" else torch.float32
             model = AutoModelForSpeechSeq2Seq.from_pretrained(
                 str(self.model_path),
                 local_files_only=True,
-                torch_dtype=torch.float16 if self._device == "cuda" else torch.float32,
+                dtype=model_dtype,
                 low_cpu_mem_usage=True
             ).to(self._device)
             device_arg = 0 if self._device in ("cuda", "npu") else -1
+
+            # Fix: Add return_timestamps=True to handle audio > 30 seconds (long-form generation)
+            generate_kwargs = {
+                "language": None,
+                "return_timestamps": True
+            }
+
             self._pipeline = pipeline(
                 "automatic-speech-recognition",
                 model=model,
                 tokenizer=processor.tokenizer,
                 feature_extractor=processor.feature_extractor,
                 device=device_arg,
-                torch_dtype=torch.float16 if self._device == "cuda" else torch.float32,
-                generate_kwargs={"language": None}
+                dtype=model_dtype,
+                generate_kwargs=generate_kwargs
             )
         except Exception as e:
             raise RuntimeError(f"Failed to load model {self.model_name}: {str(e)}")
@@ -290,8 +299,18 @@ class AutomaticSpeechRecognition:
                     temp_files.append(audio_path)
                 audio_data = self._load_audio(audio_path)
                 result = self._pipeline(audio_data)
-                if isinstance(result, dict) and 'text' in result:
-                    results.append(result['text'].strip())
+
+                # Fix: Handle result with timestamps (long-form generation returns dict with 'text' and 'chunks')
+                if isinstance(result, dict):
+                    if 'text' in result:
+                        # 'text' contains full transcription even with return_timestamps=True
+                        results.append(result['text'].strip())
+                    elif 'chunks' in result:
+                        # Fallback: concatenate chunk texts if 'text' is missing
+                        chunk_texts = [chunk.get('text', '') for chunk in result.get('chunks', []) if chunk.get('text')]
+                        combined = ' '.join(chunk_texts).strip()
+                        if combined:
+                            results.append(combined)
                 elif isinstance(result, str):
                     results.append(result.strip())
         finally:
@@ -301,7 +320,6 @@ class AutomaticSpeechRecognition:
                 except OSError:
                     pass
         return " ".join(filter(None, results))
-
 
 class ASRManager:
 
@@ -406,8 +424,10 @@ class ASRManager:
                     print(f"✗ {model_name}: FAILED to initialize")
                     continue
                 predicted_text = model.process(audio_path)
+                print(predicted_text)
                 elapsed = time.time() - start_time
-                similarity = self._normalized_levenshtein_similarity(reference_text, predicted_text)
+                similarity = self._normalized_levenshtein_similarity(
+                    reference_text.lower(), predicted_text.lower())
                 status = "✓" if similarity > 0.5 else "⚠"
                 print(f"{status} {model_name}")
                 print(f"  Similarity: {similarity:.4f} | Time: {elapsed:.2f}s")
