@@ -14,7 +14,8 @@ def ASR_main():
     for s in [
             #"OSR_us_000_0014_8k",
             "testaudio_16000_test01_20s",
-            "sample_0000", "sample_0001", "sample_0002", "sample_0003", ]:
+            "sample_0000", "sample_0001", "sample_0002", "sample_0003",
+            ]:
         audio_path = fr"D:\Data\audio_test\{s}.wav"
         reference_path = fr"D:\Data\audio_test\{s}.txt"
 
