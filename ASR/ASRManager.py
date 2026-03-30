@@ -3,6 +3,7 @@ import re
 import json
 import time
 import hashlib
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Union, List, Optional, Dict, Any
@@ -116,32 +117,52 @@ class ASRModelFactory:
         return self.get_error_count(model_name) > GLOBAL_CONFIG["max_errors_threshold"]
 
     def create(self, model_name: str) -> Optional['AutomaticSpeechRecognition']:
+        print(f"\n🔍 Creating model: {model_name}")
+        print(f"   Error count: {self.get_error_count(model_name)}/{GLOBAL_CONFIG['max_errors_threshold']}")
+        print(f"   Is faulty: {self.is_model_faulty(model_name)}")
+
         if self.is_model_faulty(model_name):
             print(f"⊘ Skipping faulty model: {model_name} (errors > {GLOBAL_CONFIG['max_errors_threshold']})")
             return None
         model_folder = self._find_model_folder(model_name)
         if not model_folder:
-            self._log_error(model_name, f"Model folder not found: {model_name}")
+            error_msg = f"Model folder not found: {model_name}"
+            print(f"❌ {error_msg}")
+            self._log_error(model_name, error_msg)
             return None
         if not self._verify_model_files(model_folder):
-            self._log_error(model_name, "Model files verification failed")
+            error_msg = "Model files verification failed"
+            print(f"❌ {error_msg} - Path: {model_folder}")
+            files_found = list(model_folder.rglob('*'))[:10]
+            print(f"   Files found: {[f.name for f in files_found]}")
+            self._log_error(model_name, error_msg)
             return None
         try:
-            return AutomaticSpeechRecognition(
+            print(f"   Attempting to initialize AutomaticSpeechRecognition...")
+            model = AutomaticSpeechRecognition(
                 model_path=model_folder,
                 model_name=model_name,
                 factory=self
             )
+            print(f"   ✓ Model initialized successfully")
+            return model
         except Exception as e:
-            self._log_error(model_name, f"Initialization error: {str(e)}")
+            error_msg = f"Initialization error: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(f"   Full traceback:")
+            traceback.print_exc()
+            self._log_error(model_name, error_msg)
             return None
 
     def _find_model_folder(self, model_name: str) -> Optional[Path]:
         folder_name = model_name.replace('/', '_')
+        print(f"   Searching for folder: {folder_name}")
         for item in self.root_folder.iterdir():
             if item.is_dir() and item.name == folder_name:
                 if (item / "model_info.json").exists() or (item / "config.json").exists():
+                    print(f"   ✓ Found: {item}")
                     return item
+        print(f"   ✗ Not found in {self.root_folder}")
         return None
 
     def _verify_model_files(self, folder: Path) -> bool:
@@ -151,6 +172,7 @@ class ASRModelFactory:
             f.endswith(('.safetensors', '.bin', '.pt', '.pth', '.nemo', '.onnx')) or
             'pytorch_model' in f for f in files
         )
+        print(f"   Config found: {has_config}, Weights found: {has_weights}")
         return has_config and has_weights
 
     def list_available_models(self) -> List[ModelInfo]:
@@ -214,6 +236,7 @@ class ASRModelFactory:
 class AutomaticSpeechRecognition:
 
     def __init__(self, model_path: Path, model_name: str, factory: ASRModelFactory):
+        print(f"   [ASR] Initializing {model_name}...")
         self.model_path = model_path
         self.model_name = model_name
         self.factory = factory
@@ -221,6 +244,7 @@ class AutomaticSpeechRecognition:
         self._device = self._determine_device()
         if torch is None:
             raise ImportError("transformers and torch are required. Install with: pip install transformers torch")
+        print(f"   [ASR] Device: {self._device}")
 
     def _determine_device(self) -> str:
         if not GLOBAL_CONFIG["use_gpu"]:
@@ -235,24 +259,31 @@ class AutomaticSpeechRecognition:
     def _load_pipeline(self):
         if self._pipeline is not None:
             return
+        print(f"   [Pipeline] Loading pipeline for {self.model_name}...")
         try:
+            print(f"   [Pipeline] Loading processor from {self.model_path}...")
             processor = AutoProcessor.from_pretrained(str(self.model_path), local_files_only=True)
-            # Fix: Use dtype instead of deprecated torch_dtype
+            print(f"   [Pipeline] Processor loaded")
+
             model_dtype = torch.float16 if self._device == "cuda" else torch.float32
+            print(f"   [Pipeline] Loading model with dtype={model_dtype}...")
+
             model = AutoModelForSpeechSeq2Seq.from_pretrained(
                 str(self.model_path),
                 local_files_only=True,
                 dtype=model_dtype,
                 low_cpu_mem_usage=True
             ).to(self._device)
+            print(f"   [Pipeline] Model loaded and moved to {self._device}")
+
             device_arg = 0 if self._device in ("cuda", "npu") else -1
 
-            # Fix: Add return_timestamps=True to handle audio > 30 seconds (long-form generation)
             generate_kwargs = {
                 "language": None,
                 "return_timestamps": True
             }
 
+            print(f"   [Pipeline] Creating pipeline...")
             self._pipeline = pipeline(
                 "automatic-speech-recognition",
                 model=model,
@@ -262,7 +293,12 @@ class AutomaticSpeechRecognition:
                 dtype=model_dtype,
                 generate_kwargs=generate_kwargs
             )
+            print(f"   [Pipeline] ✓ Pipeline ready")
         except Exception as e:
+            print(f"   [Pipeline] ❌ Failed to load pipeline")
+            print(f"   [Pipeline] Error: {str(e)}")
+            print(f"   [Pipeline] Traceback:")
+            traceback.print_exc()
             raise RuntimeError(f"Failed to load model {self.model_name}: {str(e)}")
 
     def _extract_audio(self, file_path: Path) -> str:
@@ -277,16 +313,21 @@ class AutomaticSpeechRecognition:
                 video.close()
                 return str(temp_audio)
             except Exception as e:
+                print(f"   [Audio] Failed to extract audio from {file_path}")
+                traceback.print_exc()
                 raise RuntimeError(f"Failed to extract audio from {file_path}: {str(e)}")
         return str(file_path)
 
     def _load_audio(self, file_path: str) -> Dict[str, Any]:
         if librosa is None:
             raise ImportError("librosa is required for audio processing. Install with: pip install librosa")
+        print(f"   [Audio] Loading audio: {file_path}")
         audio, sr = librosa.load(file_path, sr=16000)
+        print(f"   [Audio] Loaded: {len(audio)} samples @ {sr}Hz")
         return {"raw": audio, "sampling_rate": sr}
 
     def process(self, input_path: Union[str, Path, List[Union[str, Path]]]) -> str:
+        print(f"   [Process] Processing: {input_path}")
         self._load_pipeline()
         paths = [input_path] if not isinstance(input_path, list) else input_path
         results = []
@@ -298,21 +339,24 @@ class AutomaticSpeechRecognition:
                 if audio_path != str(path_obj):
                     temp_files.append(audio_path)
                 audio_data = self._load_audio(audio_path)
+                print(f"   [Process] Running inference...")
                 result = self._pipeline(audio_data)
+                print(f"   [Process] Inference complete")
 
-                # Fix: Handle result with timestamps (long-form generation returns dict with 'text' and 'chunks')
                 if isinstance(result, dict):
                     if 'text' in result:
-                        # 'text' contains full transcription even with return_timestamps=True
                         results.append(result['text'].strip())
                     elif 'chunks' in result:
-                        # Fallback: concatenate chunk texts if 'text' is missing
                         chunk_texts = [chunk.get('text', '') for chunk in result.get('chunks', []) if chunk.get('text')]
                         combined = ' '.join(chunk_texts).strip()
                         if combined:
                             results.append(combined)
                 elif isinstance(result, str):
                     results.append(result.strip())
+        except Exception as e:
+            print(f"   [Process] ❌ Processing failed: {str(e)}")
+            traceback.print_exc()
+            raise
         finally:
             for temp_file in temp_files:
                 try:
@@ -320,6 +364,7 @@ class AutomaticSpeechRecognition:
                 except OSError:
                     pass
         return " ".join(filter(None, results))
+
 
 class ASRManager:
 
@@ -370,6 +415,9 @@ class ASRManager:
                 successful_models.append(model_name)
             except Exception as e:
                 elapsed = time.time() - start_time
+                print(f"❌ Model {model_name} failed:")
+                print(f"   Error: {str(e)}")
+                traceback.print_exc()
                 self.factory._log_error(model_name, str(e))
                 result = ProcessingResult(
                     model_name=model_name,
@@ -419,17 +467,20 @@ class ASRManager:
                 continue
             start_time = time.time()
             try:
+                print(f"\n{'=' * 60}")
+                print(f" Testing: {model_name}")
+                print(f"{'=' * 60}")
                 model = self.factory.create(model_name)
                 if model is None:
                     print(f"✗ {model_name}: FAILED to initialize")
                     continue
                 predicted_text = model.process(audio_path)
-                print(predicted_text)
+                print(f"\n📝 Predicted: {predicted_text}")
                 elapsed = time.time() - start_time
                 similarity = self._normalized_levenshtein_similarity(
                     reference_text.lower(), predicted_text.lower())
                 status = "✓" if similarity > 0.5 else "⚠"
-                print(f"{status} {model_name}")
+                print(f"\n{status} {model_name}")
                 print(f"  Similarity: {similarity:.4f} | Time: {elapsed:.2f}s")
                 results.append({
                     'model_name': model_name,
@@ -439,8 +490,11 @@ class ASRManager:
                 })
             except Exception as e:
                 elapsed = time.time() - start_time
+                print(f"\n✗ {model_name}: ERROR")
+                print(f"  Error: {str(e)}")
+                print(f"  Traceback:")
+                traceback.print_exc()
                 self.factory._log_error(model_name, str(e))
-                print(f"✗ {model_name}: ERROR - {str(e)[:100]}")
                 results.append({
                     'model_name': model_name,
                     'similarity': 0.0,
@@ -487,4 +541,3 @@ def set_device(use_gpu: bool):
     GLOBAL_CONFIG["use_gpu"] = use_gpu
     device = "GPU" if use_gpu else "CPU"
     print(f"🔧 Device set to: {device}")
-

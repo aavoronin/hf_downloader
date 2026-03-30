@@ -8,7 +8,7 @@ def ASR_main():
 
     print("📦 Available Models:")
     models = manager.list_models()
-    for i, model in enumerate(models[:10], 1):
+    for i, model in enumerate(models, 1):
         print(f"{i}. {model.name} - {model.size_human}")
 
     for s in [

@@ -9,9 +9,9 @@ if __name__ == "__main__":
     #execute_download()
     # parse_alice()
 
-    #ASR_main()
+    ASR_main()
     #download_audio_dataset_russian()
-    do_export_10_samples()
+    #do_export_10_samples()
 
     r"""
     set_device(use_gpu=False)
