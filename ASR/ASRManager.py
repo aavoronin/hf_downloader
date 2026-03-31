@@ -7,6 +7,7 @@ Expanded with run_test2 for batch processing and aggregated statistics.
 import os
 import time
 import traceback
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Union, List, Optional, Dict, Any
@@ -16,47 +17,20 @@ from ASR.AutomaticSpeechRecognition import AutomaticSpeechRecognition
 from ASR.ModelInfo import ModelInfo
 from ASR.ProcessingResult import ProcessingResult
 
-# === Import each package independently ===
-try:
-    import torch
-except ImportError:
-    TORCH_AVAILABLE = False
-    print("⚠ Warning: torch not available")
-
-try:
-    from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
-
-    TRANSFORMERS_AVAILABLE = True
-except ImportError as e:
-    AutoModelForSpeechSeq2Seq = None
-    AutoProcessor = None
-    pipeline = None
-    TRANSFORMERS_AVAILABLE = False
-    print(f"⚠ Warning: transformers import failed: {e}")
-
-try:
-    import librosa
-
-    LIBROSA_AVAILABLE = True
-except ImportError:
-    librosa = None
-    LIBROSA_AVAILABLE = False
-    print("⚠ Warning: librosa not available")
-
-try:
-    import moviepy.editor as mp
-
-    MOVIEPY_AVAILABLE = True
-except ImportError:
-    moviepy = None
-    MOVIEPY_AVAILABLE = False
-    print("⚠ Warning: moviepy not available")
+# === Direct imports (no try/except) ===
+import torch
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+import librosa
+from moviepy.audio.io.AudioFileClip import AudioFileClip
+from jiwer import wer
+from text2digits import text2digits
 
 
 class ASRManager:
 
     def __init__(self, root_folder: str):
         self.factory = ASRModelFactory(root_folder)
+        self.t2d = text2digits.Text2Digits()
 
     def list_models(self) -> List[ModelInfo]:
         return self.factory.list_available_models()
@@ -225,15 +199,56 @@ class ASRManager:
         Get audio duration using moviepy.
         Returns duration in seconds, or 0.0 if failed.
         """
-        if not MOVIEPY_AVAILABLE:
-            return 0.0
-        try:
-            clip = mp.AudioFileClip(audio_path)
-            duration = clip.duration
-            clip.close()
-            return duration
-        except Exception:
-            return 0.0
+        clip = AudioFileClip(audio_path)
+        duration = clip.duration
+        clip.close()
+        return duration
+
+    @staticmethod
+    def _normalize_text_for_asr(text: str) -> str:
+        """
+        Standard ASR comparison normalization:
+        - lower case
+        - remove punctuation
+        - collapse whitespace
+        """
+        if not text:
+            return ""
+        text = text.lower().strip()
+        text = re.sub(r'[^\w\s\dа-яё]', '', text)
+        text = re.sub(r'\s+', ' ', text)
+        return text
+
+    def _convert_numbers_to_digits(self, text: str) -> str:
+        """
+        Convert number words to digits (multi-language support).
+        Uses standard text2digits API.
+        """
+        return self.t2d.convert(text)
+
+    def calculate_asr_metrics(
+            self,
+            reference: str,
+            hypothesis: str
+    ) -> Dict[str, Any]:
+        """
+        Calculate ASR similarity with number normalization.
+        Uses jiwer for WER-based similarity and text2digits for number conversion.
+        """
+        ref_norm = self._normalize_text_for_asr(reference)
+        hyp_norm = self._normalize_text_for_asr(hypothesis)
+
+        ref_digits = self._convert_numbers_to_digits(ref_norm)
+        hyp_digits = self._convert_numbers_to_digits(hyp_norm)
+
+        # Calculate similarity using jiwer (WER -> similarity)
+        similarity = max(0.0, 1.0 - wer(ref_digits, hyp_digits))
+
+        return {
+            'reference_normalized': ref_digits,
+            'hypothesis_normalized': hyp_digits,
+            'similarity': similarity,
+        }
 
     def run_test2(
             self,
@@ -243,7 +258,7 @@ class ASRManager:
         """
         Runs batch testing on multiple files with MODEL-FIRST loop.
         Initializes each model once, then runs all test cases against it.
-        Prints combined statistics for all files against each model.
+        Prints each expected/predicted phrase BEFORE summary.
 
         Args:
             test_cases: List of dicts, each containing {'audio': path, 'reference': path}
@@ -292,12 +307,14 @@ class ASRManager:
         file_names = [Path(case.get('audio', '')).name for case in valid_cases]
 
         # Structure to hold aggregated stats per model
-        # { model_name: { 'similarities': {file_name: sim}, 'times': {file_name: time}, 'successes': int } }
         model_stats = {
             name: {'similarities': {}, 'times': {}, 'rtfs': [], 'successes': 0}
             for name in model_names
         }
         detailed_results = []
+
+        # Store all per-file results for printing before summary
+        all_file_results = []
 
         # === MODEL-FIRST LOOP ===
         for model_idx, model_name in enumerate(model_names, 1):
@@ -312,17 +329,11 @@ class ASRManager:
 
             # Initialize model ONCE for all test cases
             start_init = time.time()
-            try:
-                model = self.factory.create(model_name)
-                if model is None:
-                    raise RuntimeError("Model initialization returned None")
-                init_time = time.time() - start_init
-                print(f"✅ Model loaded in {init_time:.2f}s")
-            except Exception as e:
-                init_time = time.time() - start_init
-                print(f"✗ Failed to initialize model: {str(e)}")
-                self.factory._log_error(model_name, str(e))
-                continue
+            model = self.factory.create(model_name)
+            if model is None:
+                raise RuntimeError("Model initialization returned None")
+            init_time = time.time() - start_init
+            print(f"✅ Model loaded in {init_time:.2f}s")
 
             # Process ALL test cases with this initialized model
             for case_idx, case in enumerate(valid_cases, 1):
@@ -343,58 +354,63 @@ class ASRManager:
                 elapsed = 0.0
                 predicted_text = ""
 
-                try:
-                    predicted_text = model.process(audio_path)
-                    elapsed = time.time() - start_infer
+                predicted_text = model.process(audio_path)
+                elapsed = time.time() - start_infer
 
-                    similarity = ASRManager._normalized_levenshtein_similarity(
-                        reference_text.lower(), predicted_text.lower()
-                    )
-                    success = True
-                    model_stats[model_name]['successes'] += 1
-                    model_stats[model_name]['similarities'][file_name] = similarity
-                    model_stats[model_name]['times'][file_name] = elapsed
+                metrics = self.calculate_asr_metrics(reference_text, predicted_text)
+                similarity = metrics['similarity']
 
-                    # Calculate RTF (avg_t component) using moviepy
-                    rtf = 0.0
-                    duration = self._get_audio_duration(audio_path)
-                    if duration > 0:
-                        rtf = elapsed / duration
+                success = True
+                model_stats[model_name]['successes'] += 1
+                model_stats[model_name]['similarities'][file_name] = similarity
+                model_stats[model_name]['times'][file_name] = elapsed
 
-                    model_stats[model_name]['rtfs'].append(rtf)
+                # Calculate RTF (avg_t component) using moviepy
+                rtf = 0.0
+                duration = self._get_audio_duration(audio_path)
+                if duration > 0:
+                    rtf = elapsed / duration
 
-                    # Print Expected and Predicted phrases
-                    print()
-                    print(f"   🟢 Expected:  {reference_text}")
-                    print(f"   🔵 Predicted: {predicted_text}")
+                model_stats[model_name]['rtfs'].append(rtf)
 
-                    status_icon = "✓" if similarity > 0.5 else "⚠"
-                    print(f"   {status_icon} Sim={similarity:.4f}, Time={elapsed:.2f}s, RTF={rtf:.2f}")
+                # Store for printing before summary
+                all_file_results.append({
+                    'file': file_name,
+                    'model': model_name,
+                    'reference_normalized': metrics['reference_normalized'],
+                    'hypothesis_normalized': metrics['hypothesis_normalized'],
+                    'similarity': similarity,
+                    'time': elapsed,
+                    'rtf': rtf
+                })
 
-                    detailed_results.append({
-                        'file': file_name,
-                        'model': model_name,
-                        'similarity': similarity,
-                        'time': elapsed,
-                        'rtf': rtf,
-                        'success': success,
-                        'predicted': predicted_text[:100] + "..." if len(predicted_text) > 100 else predicted_text
-                    })
+                # Print Expected and Predicted phrases
+                print()
+                print(f"   🟢 Expected:  {metrics['reference_normalized']}")
+                print(f"   🔵 Predicted: {metrics['hypothesis_normalized']}")
 
-                except Exception as e:
-                    elapsed = time.time() - start_infer
-                    print(f"✗ ERROR: {str(e)[:40]}")
-                    self.factory._log_error(model_name, str(e))
-                    model_stats[model_name]['times'][file_name] = elapsed
-                    detailed_results.append({
-                        'file': file_name,
-                        'model': model_name,
-                        'similarity': 0.0,
-                        'time': elapsed,
-                        'rtf': 0.0,
-                        'success': False,
-                        'error': str(e)
-                    })
+                status_icon = "✓" if similarity > 0.5 else "⚠"
+                print(f"   {status_icon} Sim={similarity:.4f}, Time={elapsed:.2f}s, RTF={rtf:.2f}")
+
+                detailed_results.append({
+                    'file': file_name,
+                    'model': model_name,
+                    'similarity': similarity,
+                    'time': elapsed,
+                    'rtf': rtf,
+                    'success': success,
+                    'predicted': predicted_text[:100] + "..." if len(predicted_text) > 100 else predicted_text
+                })
+
+        # === Print All File Results BEFORE Summary ===
+        print(f"\n{'=' * 80}")
+        print(f"📄 DETAILED RESULTS (All Files, All Models)")
+        print(f"{'=' * 80}")
+        for result in all_file_results:
+            print(f"\n📁 File: {result['file']} | Model: {result['model']}")
+            print(f"   🟢 Expected:  {result['reference_normalized']}")
+            print(f"   🔵 Predicted: {result['hypothesis_normalized']}")
+            print(f"   Sim={result['similarity']:.4f}, Time={result['time']:.2f}s, RTF={result['rtf']:.2f}")
 
         # === Build Summary Table (only models with at least 1 success) ===
         print(f"\n{'=' * 80}")
@@ -450,7 +466,6 @@ class ASRManager:
         # Build header with file columns
         header = f"{'Model Name':<45} {'AvgSim':>7} {'Avg_t':>7} {'>0.7':>5} {'>0.8':>5} {'>0.9':>5} {'>0.95':>5} {'>0.97':>5} {'>0.98':>5} {'>0.99':>5} {'MinT':>6} {'MaxT':>6}"
         for fn in file_names:
-            # Truncate file names for display
             display_name = fn[:10] + ".." if len(fn) > 12 else fn
             header += f" {display_name:>12}"
 
