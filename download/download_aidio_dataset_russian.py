@@ -4,7 +4,7 @@ Download and export audio datasets from Hugging Face.
 Function names (FIXED - no changes): download_dataset, download_audio_dataset_russian, export_audio
 """
 
-from datasets import load_dataset
+from datasets import load_dataset, Features, Value, Audio
 from download.my_token import load_hf_token
 import os
 import logging
@@ -16,6 +16,7 @@ from pathlib import Path
 import io
 from typing import Optional, List
 from huggingface_hub import login
+import requests
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -82,14 +83,8 @@ def download_dataset(
         if not streaming:
             logger.info(f"✓ Dataset loaded successfully!")
             logger.info(f"  • Number of samples: {len(dataset):,}")
-
-            # ✅ FIX: Use column_names only - does NOT trigger torchcodec
             sample_keys = dataset.column_names if len(dataset) > 0 else []
             logger.info(f"  • Column names: {sample_keys}")
-
-            # ✅ FIX: Removed dataset[0] access that triggered torchcodec import
-            # Audio metadata logging removed to avoid ImportError
-
         else:
             logger.info("✓ Dataset loaded in streaming mode.")
 
@@ -137,7 +132,6 @@ def export_audio(
     Export N audio+text pairs as WAV+TXT files.
     Function name: export_audio (unchanged, as requested)
     """
-    # Ensure dataset is cached (non-streaming to get parquet files)
     logger.info(f"Ensuring dataset '{dataset_name}' is cached...")
     _ = download_dataset(
         dest_dir=cache_dir,
@@ -149,7 +143,6 @@ def export_audio(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find parquet files in cache
     dataset_cache_name = dataset_name.replace("/", "___")
     parquet_search_path = Path(cache_dir) / dataset_cache_name
     parquet_files = sorted(parquet_search_path.rglob("*.parquet"))
@@ -179,14 +172,12 @@ def export_audio(
             name = f"sample_{exported_count:04d}"
             row = df.iloc[idx]
 
-            # Save text
             text = str(row['text']).strip()
             txt_path = output_dir / f"{name}.txt"
             with open(txt_path, 'w', encoding='utf-8') as f:
                 f.write(text)
             exported_files.append(str(txt_path))
 
-            # Save audio
             audio_val = row['audio']
             wav_path = output_dir / f"{name}.wav"
 
@@ -222,3 +213,221 @@ def export_audio(
 
     logger.info(f"✅ Exported {exported_count} samples to {output_dir}")
     return exported_files
+
+
+# =============================================================================
+# ENGLISH DATASET: LIBRISPEECH ASR (2 simple methods)
+# WORKS WITHOUT torchcodec: uses Audio(decode=False) + HTTP download
+# =============================================================================
+
+def download_librispeech_english(
+        dest_dir: str = r"D:\Data\audio\librispeech_en",
+        dataset_name: str = "openslr/librispeech_asr",
+        config: str = "clean",
+        split: str = "train.100",
+        streaming: bool = True,
+        hf_token: str = None,
+        verify_disk_space: bool = False,
+        min_space_gb: float = 1.0,
+        **load_kwargs
+) -> object:
+    """
+    Download LibriSpeech ASR dataset (English) in streaming mode.
+
+    ✅ Uses Audio(decode=False) to avoid torchcodec/FFmpeg dependency.
+    ✅ Features schema matches actual dataset columns.
+    """
+    dest_dir = os.path.normpath(dest_dir)
+    os.makedirs(dest_dir, exist_ok=True)
+    logger.info(f"Destination directory: {dest_dir}")
+
+    token = hf_token
+    if token is None:
+        try:
+            logger.info("Loading Hugging Face token via load_hf_token()...")
+            token = load_hf_token()
+            if not token:
+                raise ValueError("load_hf_token() returned empty token")
+        except ImportError as e:
+            raise ImportError("Failed to import load_hf_token from download.my_token.") from e
+        except Exception as e:
+            raise RuntimeError(f"Failed to load HF token: {e}") from e
+
+    logger.info("Authenticating with Hugging Face...")
+    login(token=token)
+
+    try:
+        logger.info(
+            f"Loading audio dataset '{dataset_name}' (config='{config}', split='{split}', streaming={streaming})...")
+
+        # ✅ FIX: Exact schema matching openslr/librispeech_asr
+        # Actual columns: file, audio{bytes,path}, text, speaker_id, chapter_id, id
+        features = Features({
+            "file": Value("string"),  # ✅ ADD THIS - was missing!
+            "audio": Audio(decode=False),  # ✅ No decoding → no torchcodec
+            "text": Value("string"),
+            "speaker_id": Value("int64"),
+            "chapter_id": Value("int64"),
+            "id": Value("string")
+        })
+
+        dataset = load_dataset(
+            dataset_name,
+            config,
+            split=split,
+            streaming=streaming,
+            features=features,
+            **load_kwargs
+        )
+
+        logger.info("✓ Dataset loaded in streaming mode (audio as bytes/path)")
+        return dataset
+
+    except Exception as e:
+        logger.error(f"Failed to load dataset: {str(e)}")
+        raise
+
+
+def _download_wav_bytes(url: str, headers: Optional[dict] = None, timeout: int = 30) -> Optional[bytes]:
+    """Download raw WAV bytes from URL."""
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        return response.content
+    except Exception as e:
+        logger.warning(f"Failed to download {url}: {e}")
+        return None
+
+
+def export_librispeech_samples(
+        output_dir: str = r"D:\Data\audio_test\librispeech",
+        cache_dir: str = r"D:\Data\audio\librispeech_en",
+        num_samples: int = 10,
+        dataset_name: str = "openslr/librispeech_asr",
+        config: str = "clean",
+        split: str = "train.100",
+        max_phrase_words: Optional[int] = 10,
+        max_duration_sec: Optional[float] = 15.0,
+        hf_token: Optional[str] = None
+) -> List[str]:
+    """
+    Extract N audio+text pairs from LibriSpeech as separate WAV+TXT files.
+
+    ✅ Downloads audio via HTTP requests - NO torchcodec or FFmpeg required.
+    """
+    logger.info(f"Loading LibriSpeech dataset in streaming mode...")
+    dataset = download_librispeech_english(
+        dest_dir=cache_dir,
+        dataset_name=dataset_name,
+        config=config,
+        split=split,
+        streaming=True
+    )
+
+    # Prepare auth header if token provided
+    headers = {}
+    if hf_token is None:
+        try:
+            hf_token = load_hf_token()
+        except:
+            pass
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+
+    # Apply optional filters for short phrases (text-only, before download)
+    if max_phrase_words is not None:
+        logger.info(f"Filtering by text: max_words={max_phrase_words}")
+
+        def filter_short_text(example):
+            text = example.get("text") or ""
+            return len(str(text).split()) <= max_phrase_words
+
+        dataset = dataset.filter(filter_short_text)
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    exported_files = []
+    exported_count = 0
+    skipped_count = 0
+
+    for sample in dataset:
+        if exported_count >= num_samples:
+            break
+
+        try:
+            name = f"librispeech_{exported_count:04d}"
+
+            # --- Save text ---
+            text = str(sample.get("text") or "").strip()
+            if not text:
+                continue
+            txt_path = output_dir / f"{name}.txt"
+            with open(txt_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+
+            # --- Download and save audio via HTTP ---
+            audio_val = sample.get("audio", {})
+            wav_path = output_dir / f"{name}.wav"
+
+            # Audio(decode=False) returns: {'bytes': ..., 'path': ...}
+            audio_bytes = audio_val.get("bytes") if isinstance(audio_val, dict) else None
+            audio_url = audio_val.get("path") if isinstance(audio_val, dict) else None
+
+            if audio_bytes:
+                wav_bytes = audio_bytes
+            elif audio_url:
+                logger.info(f"Downloading: {audio_url[:80]}...")
+                wav_bytes = _download_wav_bytes(audio_url, headers=headers)
+                if wav_bytes is None:
+                    logger.warning(f"⚠ {name}: Failed to download, skipping")
+                    if txt_path.exists():
+                        txt_path.unlink()
+                    skipped_count += 1
+                    continue
+            else:
+                logger.warning(f"⚠ {name}: No audio path or bytes available")
+                if txt_path.exists():
+                    txt_path.unlink()
+                continue
+
+            # Write WAV file
+            with open(wav_path, 'wb') as f:
+                f.write(wav_bytes)
+
+            # Get duration for logging/filtering
+            duration = None
+            try:
+                wav_io = io.BytesIO(wav_bytes)
+                sr, data = wavfile.read(wav_io)
+                duration = len(data) / sr if sr > 0 else 0
+                if max_duration_sec is not None and duration > max_duration_sec:
+                    logger.info(f"⊘ {name}: Too long ({duration:.2f}s), skipping")
+                    txt_path.unlink()
+                    wav_path.unlink()
+                    skipped_count += 1
+                    continue
+            except Exception as e:
+                logger.debug(f"Could not read WAV header for {name}: {e}")
+
+            exported_files.append(str(txt_path))
+            exported_files.append(str(wav_path))
+
+            duration_str = f" ({duration:.2f}s)" if duration else ""
+            logger.info(f"✓ {name}: {text[:50]}...{duration_str}")
+            exported_count += 1
+
+        except Exception as e:
+            logger.error(f"✗ Error exporting sample {exported_count}: {e}")
+            continue
+
+    logger.info(f"✅ Exported {exported_count}/{num_samples} LibriSpeech samples to {output_dir}")
+    if skipped_count > 0:
+        logger.info(f"   (Skipped {skipped_count} samples)")
+    return exported_files
+
+
+
+    print(f"\n✅ Exported {len(files) // 2} pairs:")
+    for i in range(0, len(files), 2):
+        print(f"  • {files[i]} + {files[i + 1]}")
