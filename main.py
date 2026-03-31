@@ -1,4 +1,4 @@
-from ASR.ASRManager import ASR_set_device
+from ASR.AutomaticSpeechRecognition import ASR_set_device
 from ASR.ASR_main import ASR_main
 from GPU.Test_GPU import test_GPU
 from OCR.ImageToTextManager import set_device, ImageToTextManager

@@ -1,6 +1,7 @@
 import os
 
-from ASR.ASRManager import ASRManager, ASR_set_device
+from ASR.ASRManager import ASRManager
+from ASR.AutomaticSpeechRecognition import ASR_set_device
 
 
 def ASR_main():
