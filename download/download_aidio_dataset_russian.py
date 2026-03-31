@@ -17,6 +17,9 @@ import io
 from typing import Optional, List
 from huggingface_hub import login
 import requests
+from typing import List
+
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -431,3 +434,99 @@ def export_librispeech_samples(
     print(f"\n✅ Exported {len(files) // 2} pairs:")
     for i in range(0, len(files), 2):
         print(f"  • {files[i]} + {files[i + 1]}")
+
+
+def select_and_consolidate_top_samples(
+        root_dir: str = r"D:\Data\audio_test3",
+        languages: List[str] = None,
+        num_to_select: int = 10,
+        output_subdir: str = "all"
+) -> List[str]:
+    """
+    Select top N samples from each language folder based on text length (symbol count),
+    then copy the selected .wav+.txt pairs to a consolidated folder.
+
+    Selection criteria: .txt files with the highest character count.
+
+    Parameters
+    ----------
+    root_dir : str
+        Root directory containing language subfolders (e.g., "ru", "en")
+    languages : List[str], optional
+        List of language subfolder names to process. Default: ["ru", "en"]
+    num_to_select : int
+        Number of top samples to select from EACH language folder
+    output_subdir : str
+        Name of subfolder where consolidated samples will be placed
+
+    Returns
+    -------
+    List[str]
+        Basenames (without extension) of selected samples copied to output folder
+    """
+    if languages is None:
+        languages = ["ru", "en"]
+
+    root_path = Path(root_dir)
+    output_path = root_path / output_subdir
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    selected_basenames = []
+
+    for lang in languages:
+        lang_path = root_path / lang
+        if not lang_path.exists():
+            print(f"⚠ Skipping non-existent folder: {lang_path}")
+            continue
+
+        print(f"\n🔍 Processing {lang}/ folder...")
+
+        # Collect all valid pairs with their text length
+        candidates = []
+        for txt_file in lang_path.glob("*.txt"):
+            wav_file = txt_file.with_suffix(".wav")
+            if not wav_file.exists():
+                print(f"   ⚠ No .wav for {txt_file.name}, skipping")
+                continue
+
+            # Count symbols in text file
+            try:
+                with open(txt_file, 'r', encoding='utf-8') as f:
+                    text = f.read()
+                    symbol_count = len(text)
+            except Exception as e:
+                print(f"   ⚠ Could not read {txt_file.name}: {e}")
+                continue
+
+            basename = txt_file.stem
+            candidates.append({
+                'basename': basename,
+                'txt': txt_file,
+                'wav': wav_file,
+                'symbol_count': symbol_count
+            })
+
+        if not candidates:
+            print(f"   ⚠ No valid pairs found in {lang}/")
+            continue
+
+        # Sort by symbol count DESC and take top N
+        candidates.sort(key=lambda x: x['symbol_count'], reverse=True)
+        top_samples = candidates[:num_to_select]
+
+        print(f"   📊 Found {len(candidates)} pairs, selecting top {len(top_samples)} by text length:")
+        for i, sample in enumerate(top_samples, 1):
+            print(f"      {i}. {sample['basename']}: {sample['symbol_count']} symbols")
+
+        # Copy selected pairs to output folder
+        for sample in top_samples:
+            try:
+                shutil.copy2(sample['txt'], output_path / sample['txt'].name)
+                shutil.copy2(sample['wav'], output_path / sample['wav'].name)
+                selected_basenames.append(sample['basename'])
+                print(f"   ✓ Copied {sample['basename']}")
+            except Exception as e:
+                print(f"   ✗ Failed to copy {sample['basename']}: {e}")
+
+    print(f"\n✅ Consolidation complete: {len(selected_basenames)} samples in {output_path}/")
+    return selected_basenames

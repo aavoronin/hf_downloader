@@ -338,6 +338,9 @@ class ASRManager:
                     model_stats[model_name]['similarities'][file_name] = similarity
                     model_stats[model_name]['times'][file_name] = elapsed
 
+                    print(reference_text.lower())
+                    print(predicted_text.lower())
+
                     status_icon = "✓" if similarity > 0.5 else "⚠"
                     print(f"{status_icon} Sim={similarity:.4f}, Time={elapsed:.2f}s")
 

@@ -22,11 +22,33 @@ def ASR_main():
     # Includes sample_0000 to sample_0009 AND librispeech_0000 to librispeech_0009
     base_dir = r"D:\Data\audio_test"
 
+    r"""
+
     test_cases = [
         {"audio": fr"{base_dir}\{prefix}_{i:04d}.wav",
          "reference": fr"{base_dir}\{prefix}_{i:04d}.txt"}
         for prefix in ['sample', 'librispeech']
-        for i in range(2)
+        for i in range(10)
+    ]"""
+
+    base_dir = r"D:\Data\audio_test3_500_20_20\all"
+
+    # Specific file identifiers extracted from your list
+    file_ids = [
+        "sample_0059", "sample_0025", "sample_0329", "sample_0405", "sample_0485",
+        "sample_0056", "sample_0079", "sample_0174", "sample_0165", "sample_0270",
+        "sample_0465", "sample_0097", "sample_0430", "sample_0456", "sample_0114",
+        "sample_0014", "sample_0049", "sample_0021", "sample_0192", "sample_0358",
+        "librispeech_0130", "librispeech_0202", "librispeech_0140", "librispeech_0142", "librispeech_0143",
+        "librispeech_0145", "librispeech_0452", "librispeech_0466", "librispeech_0125", "librispeech_0144",
+        "librispeech_0149", "librispeech_0182", "librispeech_0217", "librispeech_0141", "librispeech_0119",
+        "librispeech_0126", "librispeech_0127", "librispeech_0139", "librispeech_0191", "librispeech_0327"
+    ]
+
+    test_cases = [
+        {"audio": fr"{base_dir}\{name}.wav",
+         "reference": fr"{base_dir}\{name}.txt"}
+        for name in file_ids
     ]
 
     if not test_cases:
