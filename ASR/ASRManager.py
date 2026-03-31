@@ -1,6 +1,7 @@
-# ASRManager.py
+# ==========# ASRManager.py
 """
 ASR Model Manager - Fixed for CUDA 12.8 + sm_120 (RTX 5070 Ti)
+Expanded with run_test2 for batch processing and aggregated statistics.
 """
 
 import os
@@ -560,6 +561,156 @@ class ASRManager:
             status = "SUCCESS" if r['success'] else "FAILED"
             print(f"{r['model_name']:<50} {r['similarity']:>10.4f} {status:>10} {r['time_taken']:>10.2f}")
         return results
+
+    def run_test2(
+            self,
+            test_cases: List[Dict[str, str]],
+            model_names: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Runs batch testing on multiple files and prints combined statistics for all files against each model.
+
+        Args:
+            test_cases: List of dicts, each containing {'audio': path, 'reference': path}
+            model_names: Optional list of model names to test. If None, uses all available.
+        """
+        if not test_cases:
+            print("❌ No test cases provided.")
+            return {}
+
+        if model_names is None:
+            available = self.factory.list_available_models()
+            model_names = [m.name for m in available]
+
+        print(f"\n🚀 Starting Batch Test (run_test2)")
+        print(f"📂 Total Files: {len(test_cases)}")
+        print(f"🤖 Total Models: {len(model_names)}")
+        print("-" * 60)
+
+        # Structure to hold aggregated stats per model
+        # { model_name: { 'similarities': [], 'times': [], 'successes': 0, 'total': 0 } }
+        model_stats = {name: {'similarities': [], 'times': [], 'successes': 0, 'total': 0} for name in model_names}
+        detailed_results = []
+
+        for idx, case in enumerate(test_cases):
+            audio_path = case.get('audio')
+            reference_path = case.get('reference')
+
+            if not audio_path or not reference_path:
+                print(f"⚠️  Skipping case {idx}: Missing audio or reference path")
+                continue
+
+            print(f"\n📁 File [{idx + 1}/{len(test_cases)}]: {Path(audio_path).name}")
+
+            # Load Reference Text
+            try:
+                with open(reference_path, 'r', encoding='utf-8') as f:
+                    reference_text = f.read().strip()
+                    reference_text = reference_text.replace("\r", " ").replace("\n", " ")
+                    for _ in range(10):
+                        reference_text = reference_text.replace("  ", " ")
+            except Exception as e:
+                print(f"❌ Failed to load reference for {audio_path}: {e}")
+                continue
+
+            for model_name in model_names:
+                if self.factory.is_model_faulty(model_name):
+                    print(f"   ⊘ {model_name}: SKIPPED (faulty)")
+                    model_stats[model_name]['total'] += 1
+                    continue
+
+                start_time = time.time()
+                success = False
+                similarity = 0.0
+
+                try:
+                    model = self.factory.create(model_name)
+                    if model is None:
+                        raise RuntimeError("Model initialization returned None")
+
+                    predicted_text = model.process(audio_path)
+                    elapsed = time.time() - start_time
+
+                    similarity = self._normalized_levenshtein_similarity(
+                        reference_text.lower(), predicted_text.lower()
+                    )
+                    success = True
+                    print(f"{case}: {predicted_text}")
+                    model_stats[model_name]['successes'] += 1
+                    model_stats[model_name]['similarities'].append(similarity)
+                    model_stats[model_name]['times'].append(elapsed)
+
+                    status_icon = "✓" if similarity > 0.5 else "⚠"
+                    print(f"   {status_icon} {model_name}: Sim={similarity:.2f}, Time={elapsed:.2f}s")
+
+                    detailed_results.append({
+                        'file': Path(audio_path).name,
+                        'model': model_name,
+                        'similarity': similarity,
+                        'time': elapsed,
+                        'success': success
+                    })
+
+                except Exception as e:
+                    elapsed = time.time() - start_time
+                    print(f"   ✗ {model_name}: ERROR ({str(e)[:50]})")
+                    self.factory._log_error(model_name, str(e))
+                    model_stats[model_name]['times'].append(elapsed)
+                    detailed_results.append({
+                        'file': Path(audio_path).name,
+                        'model': model_name,
+                        'similarity': 0.0,
+                        'time': elapsed,
+                        'success': False,
+                        'error': str(e)
+                    })
+
+                model_stats[model_name]['total'] += 1
+
+        # Print Combined Statistics
+        print(f"\n{'=' * 80}")
+        print(f"📊 COMBINED STATISTICS (All Files)")
+        print(f"{'=' * 80}")
+        print(f"{'Model Name':<40} {'Avg Sim':>10} {'Best Sim':>10} {'Avg Time':>10} {'Success Rate':>12}")
+        print("-" * 80)
+
+        summary_table = []
+        for model_name in model_names:
+            stats = model_stats[model_name]
+            total = stats['total']
+            successes = stats['successes']
+
+            if total == 0:
+                continue
+
+            avg_sim = sum(stats['similarities']) / len(stats['similarities']) if stats['similarities'] else 0.0
+            best_sim = max(stats['similarities']) if stats['similarities'] else 0.0
+            avg_time = sum(stats['times']) / len(stats['times']) if stats['times'] else 0.0
+            success_rate = (successes / total) * 100
+
+            summary_table.append({
+                'model_name': model_name,
+                'avg_sim': avg_sim,
+                'best_sim': best_sim,
+                'avg_time': avg_time,
+                'success_rate': success_rate,
+                'total_runs': total
+            })
+
+            print(f"{model_name:<40} {avg_sim:>10.4f} {best_sim:>10.4f} {avg_time:>10.2f}s {success_rate:>11.1f}%")
+
+        # Save Statistics
+        stats_payload = {
+            'test_type': 'batch_run_test2',
+            'total_files': len(test_cases),
+            'models_tested': len(model_names),
+            'model_summary': summary_table,
+            'detailed_results': detailed_results
+        }
+        self.factory.save_statistics(stats_payload)
+        print(f"\n💾 Statistics saved to {self.factory.stats_path}")
+
+        return stats_payload
 
     @staticmethod
     def _normalized_levenshtein_similarity(s1: str, s2: str) -> float:

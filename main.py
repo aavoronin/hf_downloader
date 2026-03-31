@@ -13,10 +13,13 @@ if __name__ == "__main__":
 
     #test_GPU()
     #ASR_set_device(use_gpu=True)
-    #ASR_main()
+    ASR_main()
     #download_audio_dataset_russian()
     #do_export_10_samples()
 
+
+
+    r"""
     # Шаг 1: Загрузить (streaming - без полной загрузки)
     dataset = download_librispeech_english(
         dest_dir=r"D:\Data\audio\librispeech_en",
@@ -33,7 +36,7 @@ if __name__ == "__main__":
         max_duration_sec=15.0  # ≤15 секунд
     )
 
-    r"""
+    
     manager = ImageToTextManager(r"D:\AIs\Image-to-Text")
     models = manager.get_available_models()
     for model in models:
