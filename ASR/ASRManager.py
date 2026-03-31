@@ -55,6 +55,8 @@ except ImportError:
 
 class ASRManager:
 
+
+
     def __init__(self, root_folder: str):
         self.factory = ASRModelFactory(root_folder)
 
@@ -271,8 +273,15 @@ class ASRManager:
 
         print(f"✅ Loaded {len(valid_cases)} valid test cases")
 
+        # Extract file names for column headers
+        file_names = [Path(case.get('audio', '')).name for case in valid_cases]
+
         # Structure to hold aggregated stats per model
-        model_stats = {name: {'similarities': [], 'times': [], 'successes': 0, 'total': 0} for name in model_names}
+        # { model_name: { 'similarities': {file_name: sim}, 'times': {file_name: time}, 'successes': int } }
+        model_stats = {
+            name: {'similarities': {}, 'times': {}, 'successes': 0}
+            for name in model_names
+        }
         detailed_results = []
 
         # === MODEL-FIRST LOOP ===
@@ -284,9 +293,6 @@ class ASRManager:
             # Skip faulty models
             if self.factory.is_model_faulty(model_name):
                 print(f"⊘ SKIPPED: Model marked as faulty (>10 errors)")
-                # Record skipped runs for all cases
-                for _ in valid_cases:
-                    model_stats[model_name]['total'] += 1
                 continue
 
             # Initialize model ONCE for all test cases
@@ -301,10 +307,6 @@ class ASRManager:
                 init_time = time.time() - start_init
                 print(f"✗ Failed to initialize model: {str(e)}")
                 self.factory._log_error(model_name, str(e))
-                # Record failures for all cases
-                for _ in valid_cases:
-                    model_stats[model_name]['total'] += 1
-                    model_stats[model_name]['times'].append(init_time)
                 continue
 
             # Process ALL test cases with this initialized model
@@ -312,13 +314,13 @@ class ASRManager:
                 audio_path = case.get('audio')
                 reference_path = case.get('reference')
                 reference_text = reference_cache.get(reference_path)
+                file_name = Path(audio_path).name
 
                 if not reference_text:
                     print(f"   ⚠️  [{case_idx}/{len(valid_cases)}] Skipping: no reference text")
-                    model_stats[model_name]['total'] += 1
                     continue
 
-                print(f"   📁 [{case_idx}/{len(valid_cases)}] {Path(audio_path).name}", end=" ... ")
+                print(f"   📁 [{case_idx}/{len(valid_cases)}] {file_name}", end=" ... ")
 
                 start_infer = time.time()
                 success = False
@@ -328,20 +330,19 @@ class ASRManager:
                     predicted_text = model.process(audio_path)
                     elapsed = time.time() - start_infer
 
-                    similarity = self._normalized_levenshtein_similarity(
+                    similarity = ASRManager._normalized_levenshtein_similarity(
                         reference_text.lower(), predicted_text.lower()
                     )
                     success = True
                     model_stats[model_name]['successes'] += 1
-                    model_stats[model_name]['similarities'].append(similarity)
-                    model_stats[model_name]['times'].append(elapsed)
+                    model_stats[model_name]['similarities'][file_name] = similarity
+                    model_stats[model_name]['times'][file_name] = elapsed
 
                     status_icon = "✓" if similarity > 0.5 else "⚠"
-                    print(predicted_text)
                     print(f"{status_icon} Sim={similarity:.4f}, Time={elapsed:.2f}s")
 
                     detailed_results.append({
-                        'file': Path(audio_path).name,
+                        'file': file_name,
                         'model': model_name,
                         'similarity': similarity,
                         'time': elapsed,
@@ -353,9 +354,9 @@ class ASRManager:
                     elapsed = time.time() - start_infer
                     print(f"✗ ERROR: {str(e)[:40]}")
                     self.factory._log_error(model_name, str(e))
-                    model_stats[model_name]['times'].append(elapsed)
+                    model_stats[model_name]['times'][file_name] = elapsed
                     detailed_results.append({
-                        'file': Path(audio_path).name,
+                        'file': file_name,
                         'model': model_name,
                         'similarity': 0.0,
                         'time': elapsed,
@@ -363,46 +364,62 @@ class ASRManager:
                         'error': str(e)
                     })
 
-                model_stats[model_name]['total'] += 1
-
-        # === Print Combined Statistics ===
+        # === Build Summary Table (only models with at least 1 success) ===
         print(f"\n{'=' * 80}")
         print(f"📊 COMBINED STATISTICS (All Files)")
         print(f"{'=' * 80}")
-        print(f"{'Model Name':<40} {'Avg Sim':>10} {'Best Sim':>10} {'Avg Time':>10} {'Success Rate':>12}")
-        print("-" * 80)
 
-        summary_table = []
+        summary_rows = []
         for model_name in model_names:
             stats = model_stats[model_name]
-            total = stats['total']
-            successes = stats['successes']
 
-            if total == 0:
+            # Skip models with no successful results
+            if stats['successes'] == 0:
                 continue
 
-            avg_sim = sum(stats['similarities']) / len(stats['similarities']) if stats['similarities'] else 0.0
-            best_sim = max(stats['similarities']) if stats['similarities'] else 0.0
-            avg_time = sum(stats['times']) / len(stats['times']) if stats['times'] else 0.0
-            success_rate = (successes / total) * 100 if total > 0 else 0.0
+            similarities = list(stats['similarities'].values())
+            times = list(stats['times'].values())
 
-            summary_table.append({
+            avg_sim = sum(similarities) / len(similarities) if similarities else 0.0
+            min_time = min(times) if times else 0.0
+            max_time = max(times) if times else 0.0
+
+            summary_rows.append({
                 'model_name': model_name,
                 'avg_sim': avg_sim,
-                'best_sim': best_sim,
-                'avg_time': avg_time,
-                'success_rate': success_rate,
-                'total_runs': total
+                'min_time': min_time,
+                'max_time': max_time,
+                'file_similarities': stats['similarities'],
+                'successes': stats['successes']
             })
 
-            print(f"{model_name:<40} {avg_sim:>10.4f} {best_sim:>10.4f} {avg_time:>10.2f}s {success_rate:>11.1f}%")
+        # Sort by Avg Similarity DESC
+        summary_rows.sort(key=lambda x: x['avg_sim'], reverse=True)
+
+        # Build header with file columns
+        header = f"{'Model Name':<35} {'Avg Sim':>10} {'Min Time':>10} {'Max Time':>10}"
+        for fn in file_names:
+            # Truncate file names for display
+            display_name = fn[:15] + ".." if len(fn) > 17 else fn
+            header += f" {display_name:>17}"
+
+        print(header)
+        print("-" * len(header))
+
+        for row in summary_rows:
+            line = f"{row['model_name']:<35} {row['avg_sim']:>10.4f} {row['min_time']:>10.2f}s {row['max_time']:>10.2f}s"
+            for fn in file_names:
+                sim = row['file_similarities'].get(fn, 0.0)
+                line += f" {sim:>17.4f}"
+            print(line)
 
         # Save Statistics
         stats_payload = {
             'test_type': 'batch_run_test2_model_first',
             'total_files': len(valid_cases),
+            'file_names': file_names,
             'models_tested': len(model_names),
-            'model_summary': summary_table,
+            'model_summary': summary_rows,
             'detailed_results': detailed_results
         }
         self.factory.save_statistics(stats_payload)
@@ -434,5 +451,4 @@ class ASRManager:
         distance = levenshtein_distance(s1.lower(), s2.lower())
         max_len = max(len(s1), len(s2))
         return 1.0 - (distance / max_len)
-
 
