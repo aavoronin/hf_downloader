@@ -55,8 +55,6 @@ except ImportError:
 
 class ASRManager:
 
-
-
     def __init__(self, root_folder: str):
         self.factory = ASRModelFactory(root_folder)
 
@@ -222,6 +220,21 @@ class ASRManager:
             print(f"{r['model_name']:<50} {r['similarity']:>10.4f} {status:>10} {r['time_taken']:>10.2f}")
         return results
 
+    def _get_audio_duration(self, audio_path: str) -> float:
+        """
+        Get audio duration using moviepy.
+        Returns duration in seconds, or 0.0 if failed.
+        """
+        if not MOVIEPY_AVAILABLE:
+            return 0.0
+        try:
+            clip = mp.AudioFileClip(audio_path)
+            duration = clip.duration
+            clip.close()
+            return duration
+        except Exception:
+            return 0.0
+
     def run_test2(
             self,
             test_cases: List[Dict[str, str]],
@@ -236,6 +249,8 @@ class ASRManager:
             test_cases: List of dicts, each containing {'audio': path, 'reference': path}
             model_names: Optional list of model names to test. If None, uses all available.
         """
+        total_start = time.time()
+
         if not test_cases:
             print("❌ No test cases provided.")
             return {}
@@ -279,7 +294,7 @@ class ASRManager:
         # Structure to hold aggregated stats per model
         # { model_name: { 'similarities': {file_name: sim}, 'times': {file_name: time}, 'successes': int } }
         model_stats = {
-            name: {'similarities': {}, 'times': {}, 'successes': 0}
+            name: {'similarities': {}, 'times': {}, 'rtfs': [], 'successes': 0}
             for name in model_names
         }
         detailed_results = []
@@ -325,6 +340,8 @@ class ASRManager:
                 start_infer = time.time()
                 success = False
                 similarity = 0.0
+                elapsed = 0.0
+                predicted_text = ""
 
                 try:
                     predicted_text = model.process(audio_path)
@@ -338,17 +355,28 @@ class ASRManager:
                     model_stats[model_name]['similarities'][file_name] = similarity
                     model_stats[model_name]['times'][file_name] = elapsed
 
-                    print(reference_text.lower())
-                    print(predicted_text.lower())
+                    # Calculate RTF (avg_t component) using moviepy
+                    rtf = 0.0
+                    duration = self._get_audio_duration(audio_path)
+                    if duration > 0:
+                        rtf = elapsed / duration
+
+                    model_stats[model_name]['rtfs'].append(rtf)
+
+                    # Print Expected and Predicted phrases
+                    print()
+                    print(f"   🟢 Expected:  {reference_text}")
+                    print(f"   🔵 Predicted: {predicted_text}")
 
                     status_icon = "✓" if similarity > 0.5 else "⚠"
-                    print(f"{status_icon} Sim={similarity:.4f}, Time={elapsed:.2f}s")
+                    print(f"   {status_icon} Sim={similarity:.4f}, Time={elapsed:.2f}s, RTF={rtf:.2f}")
 
                     detailed_results.append({
                         'file': file_name,
                         'model': model_name,
                         'similarity': similarity,
                         'time': elapsed,
+                        'rtf': rtf,
                         'success': success,
                         'predicted': predicted_text[:100] + "..." if len(predicted_text) > 100 else predicted_text
                     })
@@ -363,6 +391,7 @@ class ASRManager:
                         'model': model_name,
                         'similarity': 0.0,
                         'time': elapsed,
+                        'rtf': 0.0,
                         'success': False,
                         'error': str(e)
                     })
@@ -382,14 +411,33 @@ class ASRManager:
 
             similarities = list(stats['similarities'].values())
             times = list(stats['times'].values())
+            rtfs = stats['rtfs']
 
             avg_sim = sum(similarities) / len(similarities) if similarities else 0.0
             min_time = min(times) if times else 0.0
             max_time = max(times) if times else 0.0
+            avg_t = sum(rtfs) / len(rtfs) if rtfs else 0.0
+
+            # Calculate similarity thresholds
+            sim_70 = sum(1 for s in similarities if s > 0.7)
+            sim_80 = sum(1 for s in similarities if s > 0.8)
+            sim_90 = sum(1 for s in similarities if s > 0.9)
+            sim_95 = sum(1 for s in similarities if s > 0.95)
+            sim_97 = sum(1 for s in similarities if s > 0.97)
+            sim_98 = sum(1 for s in similarities if s > 0.98)
+            sim_99 = sum(1 for s in similarities if s > 0.99)
 
             summary_rows.append({
                 'model_name': model_name,
                 'avg_sim': avg_sim,
+                'avg_t': avg_t,
+                'sim_70': sim_70,
+                'sim_80': sim_80,
+                'sim_90': sim_90,
+                'sim_95': sim_95,
+                'sim_97': sim_97,
+                'sim_98': sim_98,
+                'sim_99': sim_99,
                 'min_time': min_time,
                 'max_time': max_time,
                 'file_similarities': stats['similarities'],
@@ -400,20 +448,20 @@ class ASRManager:
         summary_rows.sort(key=lambda x: x['avg_sim'], reverse=True)
 
         # Build header with file columns
-        header = f"{'Model Name':<35} {'Avg Sim':>10} {'Min Time':>10} {'Max Time':>10}"
+        header = f"{'Model Name':<45} {'AvgSim':>7} {'Avg_t':>7} {'>0.7':>5} {'>0.8':>5} {'>0.9':>5} {'>0.95':>5} {'>0.97':>5} {'>0.98':>5} {'>0.99':>5} {'MinT':>6} {'MaxT':>6}"
         for fn in file_names:
             # Truncate file names for display
-            display_name = fn[:15] + ".." if len(fn) > 17 else fn
-            header += f" {display_name:>17}"
+            display_name = fn[:10] + ".." if len(fn) > 12 else fn
+            header += f" {display_name:>12}"
 
         print(header)
         print("-" * len(header))
 
         for row in summary_rows:
-            line = f"{row['model_name']:<35} {row['avg_sim']:>10.4f} {row['min_time']:>10.2f}s {row['max_time']:>10.2f}s"
+            line = f"{row['model_name']:<45} {row['avg_sim']:>7.4f} {row['avg_t']:>7.2f} {row['sim_70']:>5} {row['sim_80']:>5} {row['sim_90']:>5} {row['sim_95']:>5} {row['sim_97']:>5} {row['sim_98']:>5} {row['sim_99']:>5} {row['min_time']:>6.2f} {row['max_time']:>6.2f}"
             for fn in file_names:
                 sim = row['file_similarities'].get(fn, 0.0)
-                line += f" {sim:>17.4f}"
+                line += f" {sim:>12.4f}"
             print(line)
 
         # Save Statistics
@@ -427,6 +475,9 @@ class ASRManager:
         }
         self.factory.save_statistics(stats_payload)
         print(f"\n💾 Statistics saved to {self.factory.stats_path}")
+
+        total_elapsed = time.time() - total_start
+        print(f"\n⏱ Total Run Time: {total_elapsed:.2f} seconds")
 
         return stats_payload
 
@@ -454,4 +505,3 @@ class ASRManager:
         distance = levenshtein_distance(s1.lower(), s2.lower())
         max_len = max(len(s1), len(s2))
         return 1.0 - (distance / max_len)
-
