@@ -11,6 +11,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Union, List, Optional, Dict, Any
+import sys
+from io import StringIO
 
 from ASR.ASRModelFactory import ASRModelFactory
 from ASR.AutomaticSpeechRecognition import AutomaticSpeechRecognition
@@ -354,7 +356,14 @@ class ASRManager:
                 elapsed = 0.0
                 predicted_text = ""
 
-                predicted_text = model.process(audio_path)
+                # Suppress verbose [Process]/[Audio] logs from model.process()
+                old_stdout = sys.stdout
+                sys.stdout = StringIO()
+                try:
+                    predicted_text = model.process(audio_path)
+                finally:
+                    sys.stdout = old_stdout
+
                 elapsed = time.time() - start_infer
 
                 metrics = self.calculate_asr_metrics(reference_text, predicted_text)
