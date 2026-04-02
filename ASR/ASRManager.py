@@ -252,6 +252,37 @@ class ASRManager:
             'similarity': similarity,
         }
 
+    def _normalize_for_display(self, text: str) -> str:
+        """
+        Normalize text for display/comparison:
+        - Convert 'plus' to '+'
+        - Convert number words to digits (RU/EN) via text2digits
+        - Collapse digits in phone numbers (remove spaces between digit groups)
+        - Lowercase, remove extra whitespace
+        """
+        if not text:
+            return ""
+
+        # Lowercase and strip
+        text = text.lower().strip()
+
+        # Replace common variants of 'plus' with '+'
+        text = re.sub(r'\b(plus|\+)\b', '+', text)
+
+        # Convert number words to digits using text2digits
+        text = self.t2d.convert(text)
+
+        # Collapse sequences of digits separated by spaces (phone numbers)
+        # e.g., "792 188 89 94 2" → "79218889942"
+        text = re.sub(r'(\d)\s+(\d)', r'\1\2', text)
+        # Repeat to catch longer sequences
+        text = re.sub(r'(\d)\s+(\d)', r'\1\2', text)
+
+        # Collapse whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        return text
+
     def run_test2(
             self,
             test_cases: List[Dict[str, str]],
@@ -259,8 +290,7 @@ class ASRManager:
     ) -> Dict[str, Any]:
         """
         Runs batch testing on multiple files with MODEL-FIRST loop.
-        Initializes each model once, then runs all test cases against it.
-        Prints each expected/predicted phrase BEFORE summary.
+        Prints expected phrase once, then all model predictions below it.
 
         Args:
             test_cases: List of dicts, each containing {'audio': path, 'reference': path}
@@ -315,8 +345,9 @@ class ASRManager:
         }
         detailed_results = []
 
-        # Store all per-file results for printing before summary
-        all_file_results = []
+        # Store results grouped by file for display
+        file_results = {case.get('audio'): {'reference': None, 'predictions': []}
+                        for case in valid_cases}
 
         # === MODEL-FIRST LOOP ===
         for model_idx, model_name in enumerate(model_names, 1):
@@ -382,24 +413,19 @@ class ASRManager:
 
                 model_stats[model_name]['rtfs'].append(rtf)
 
-                # Store for printing before summary
-                all_file_results.append({
-                    'file': file_name,
+                # Store for grouped display
+                if file_results[audio_path]['reference'] is None:
+                    file_results[audio_path]['reference'] = self._normalize_for_display(reference_text)
+                file_results[audio_path]['predictions'].append({
                     'model': model_name,
-                    'reference_normalized': metrics['reference_normalized'],
-                    'hypothesis_normalized': metrics['hypothesis_normalized'],
+                    'predicted_normalized': self._normalize_for_display(predicted_text),
                     'similarity': similarity,
                     'time': elapsed,
                     'rtf': rtf
                 })
 
-                # Print Expected and Predicted phrases
-                print()
-                print(f"   🟢 Expected:  {metrics['reference_normalized']}")
-                print(f"   🔵 Predicted: {metrics['hypothesis_normalized']}")
-
                 status_icon = "✓" if similarity > 0.5 else "⚠"
-                print(f"   {status_icon} Sim={similarity:.4f}, Time={elapsed:.2f}s, RTF={rtf:.2f}")
+                print(f"{status_icon} Sim={similarity:.4f}")
 
                 detailed_results.append({
                     'file': file_name,
@@ -411,15 +437,17 @@ class ASRManager:
                     'predicted': predicted_text[:100] + "..." if len(predicted_text) > 100 else predicted_text
                 })
 
-        # === Print All File Results BEFORE Summary ===
+        # === Print Grouped Results: Expected + All Model Predictions ===
         print(f"\n{'=' * 80}")
-        print(f"📄 DETAILED RESULTS (All Files, All Models)")
+        print(f"📄 RESULTS BY FILE (Expected + All Models)")
         print(f"{'=' * 80}")
-        for result in all_file_results:
-            print(f"\n📁 File: {result['file']} | Model: {result['model']}")
-            print(f"   🟢 Expected:  {result['reference_normalized']}")
-            print(f"   🔵 Predicted: {result['hypothesis_normalized']}")
-            print(f"   Sim={result['similarity']:.4f}, Time={result['time']:.2f}s, RTF={result['rtf']:.2f}")
+
+        for audio_path, data in file_results.items():
+            file_name = Path(audio_path).name
+            print(f"\n📁 File: {file_name}")
+            print(f"   🟢 Expected: {data['reference']}")
+            for pred in data['predictions']:
+                print(f"      {pred['predicted_normalized']} --- {pred['model']}")
 
         # === Build Summary Table (only models with at least 1 success) ===
         print(f"\n{'=' * 80}")

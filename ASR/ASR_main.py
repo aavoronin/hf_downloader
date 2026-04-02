@@ -23,7 +23,6 @@ def ASR_main():
     base_dir = r"D:\Data\audio_test"
 
     r"""
-
     test_cases = [
         {"audio": fr"{base_dir}\{prefix}_{i:04d}.wav",
          "reference": fr"{base_dir}\{prefix}_{i:04d}.txt"}
@@ -63,7 +62,8 @@ def ASR_main():
     # 5. Run Batch Test
     # You can optionally pass model_names=["model_name_1", "model_name_2"]
     # to test specific models instead of all available ones.
-    manager.run_test2(test_cases=test_cases)
+    manager.run_test2([t for t in test_cases if "sample" in t["audio"]])
+    manager.run_test2([t for t in test_cases if "librispeech" in t["audio"]])
 
     r"""
 

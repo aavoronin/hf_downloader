@@ -1,0 +1,5 @@
+PS C:\Users\AV> Write-Host "CPU:" (Get-CimInstance Win32_Processor).Name; Write-Host "GPU:" (Get-CimInstance Win32_VideoController).Name; Write-Host "RAM:" "$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1GB, 2)) GB"
+CPU: AMD Ryzen 9 8940HX with Radeon Graphics
+GPU: AMD Radeon(TM) 610M NVIDIA GeForce RTX 5070 Ti Laptop GPU
+RAM: 64 GB
+PS C:\Users\AV>
