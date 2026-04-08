@@ -1,5 +1,6 @@
 from typing import List
 
+from download.HFModelLister import HFModelLister
 from download.MultipleModelsDownloader import MultipleModelsDownloader
 
 
@@ -22,6 +23,13 @@ def execute_download():
         lister.fetch_all_pages()
         lister.show_results()
     """
+
+
+    start_urls = ["https://huggingface.co/models?pipeline_tag=any-to-any&sort=downloads"]
+    root_folder = r"D:\AIs\Any-to-Any"
+    HFModelLister.MAX_PAGES = 4
+    download_certain_type_of_models(root_folder, start_urls)
+    return
 
     start_urls = [
         # "https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=ocr",

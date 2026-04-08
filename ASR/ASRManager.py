@@ -364,7 +364,8 @@ class ASRManager:
             start_init = time.time()
             model = self.factory.create(model_name)
             if model is None:
-                raise RuntimeError("Model initialization returned None")
+                print("Model initialization returned None")
+                continue
             init_time = time.time() - start_init
             print(f"✅ Model loaded in {init_time:.2f}s")
 
@@ -392,6 +393,9 @@ class ASRManager:
                 sys.stdout = StringIO()
                 try:
                     predicted_text = model.process(audio_path)
+                except Exception as e:
+                    print(e)
+                    continue
                 finally:
                     sys.stdout = old_stdout
 

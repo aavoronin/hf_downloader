@@ -38,6 +38,7 @@ class HFModelDownloader:
         self.verbose = verbose
         self._token = None
         self._authenticated = False
+        self.try_version = False
 
     def _log(self, message: str) -> None:
         """Internal logging method respecting verbose flag."""
@@ -304,11 +305,14 @@ class HFModelDownloader:
             log(f"  Repo: {model_id}")
 
             # Strategy 1: Check for git tags first
-            best_revision = self._get_best_revision(model_id)
+            if self.try_version:
+                best_revision = self._get_best_revision(model_id)
+            else:
+                best_revision = None
 
             # Strategy 2: If no tags, check for versioned files in filenames
             allow_patterns = None
-            if best_revision is None:
+            if best_revision is None and self.try_version:
                 latest_files = self._get_latest_version_files(model_id)
                 if latest_files:
                     allow_patterns = latest_files

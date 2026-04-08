@@ -11,7 +11,7 @@ from download.execute_download import execute_download
 from download.export_audio_samples import export_audio, do_export_10_samples
 
 if __name__ == "__main__":
-    #execute_download()
+    execute_download()
     # parse_alice()
 
     #test_GPU()
