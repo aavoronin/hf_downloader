@@ -367,7 +367,7 @@ class ASRManager:
                 print("Model initialization returned None")
                 continue
             init_time = time.time() - start_init
-            print(f"✅ Model loaded in {init_time:.2f}s")
+            print(f"{datetime.now().isoformat(timespec='milliseconds')} Model loaded in {init_time:.2f}s")
 
             # Process ALL test cases with this initialized model
             for case_idx, case in enumerate(valid_cases, 1):
