@@ -7,11 +7,13 @@ from OCR.ImageToTextManager import set_device, ImageToTextManager
 from OCR.prepare_ocr_test import parse_alice
 from download.download_aidio_dataset_russian import download_librispeech_english, export_librispeech_samples, \
     download_audio_dataset_russian, select_and_consolidate_top_samples
+from download.download_mp3 import download_alice
 from download.execute_download import execute_download
 from download.export_audio_samples import export_audio, do_export_10_samples
 
 if __name__ == "__main__":
-    execute_download()
+    #execute_download()
+    #download_alice()
     # parse_alice()
 
     #test_GPU()

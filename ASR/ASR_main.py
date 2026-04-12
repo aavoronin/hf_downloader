@@ -63,7 +63,7 @@ def ASR_main():
     # You can optionally pass model_names=["model_name_1", "model_name_2"]
     # to test specific models instead of all available ones.
     manager.run_test2([t for t in test_cases if "sample" in t["audio"]])
-    #manager.run_test2([t for t in test_cases if "librispeech" in t["audio"]])
+    manager.run_test2([t for t in test_cases if "librispeech" in t["audio"]])
 
     r"""
 
