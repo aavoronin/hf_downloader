@@ -3,7 +3,6 @@
 ASR Model Manager - Fixed for CUDA 12.8 + sm_120 (RTX 5070 Ti)
 Expanded with run_test2 for batch processing and aggregated statistics.
 """
-
 import os
 import time
 import traceback
@@ -13,12 +12,10 @@ from pathlib import Path
 from typing import Union, List, Optional, Dict, Any
 import sys
 from io import StringIO
-
 from ASR.ASRModelFactory import ASRModelFactory
 from ASR.AutomaticSpeechRecognition import AutomaticSpeechRecognition
 from ASR.ModelInfo import ModelInfo
 from ASR.ProcessingResult import ProcessingResult
-
 # === Direct imports (no try/except) ===
 import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
@@ -27,12 +24,19 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from jiwer import wer
 from text2digits import text2digits
 
-
 class ASRManager:
-
     def __init__(self, root_folder: str):
         self.factory = ASRModelFactory(root_folder)
         self.t2d = text2digits.Text2Digits()
+        self.model_filter_mode = 'all'  # Options: 'all', 'ru', 'en'
+
+    def set_model_filter_mode(self, mode: str):
+        """Switch between model sets: 'all', 'ru_models', or 'en_models'."""
+        mode = mode.lower().replace('_models', '')
+        if mode in ('all', 'ru', 'en'):
+            self.model_filter_mode = mode
+        else:
+            raise ValueError("mode must be 'all', 'ru_models', or 'en_models'")
 
     def list_models(self) -> List[ModelInfo]:
         return self.factory.list_available_models()
@@ -42,13 +46,9 @@ class ASRManager:
 
     @staticmethod
     def _clean_reference_text(text: str) -> str:
-        """
-        Clean reference text: normalize whitespace, remove newlines/carriage returns.
-        Reusable method for both run_test and run_test2.
-        """
+        """Clean reference text: normalize whitespace, remove newlines/carriage returns."""
         text = text.strip()
         text = text.replace("\r", " ").replace("\n", " ")
-        # Collapse multiple spaces into single space (iterate to handle edge cases)
         while "  " in text:
             text = text.replace("  ", " ")
         return text
@@ -58,7 +58,7 @@ class ASRManager:
         try:
             with open(reference_path, 'r', encoding='utf-8') as f:
                 raw_text = f.read()
-                return self._clean_reference_text(raw_text)
+            return self._clean_reference_text(raw_text)
         except FileNotFoundError:
             print(f"❌ Reference file not found: {reference_path}")
             return None
@@ -67,9 +67,9 @@ class ASRManager:
             return None
 
     def apply_all(
-            self,
-            input_paths: Union[str, Path, List[Union[str, Path]]],
-            model_names: Optional[List[str]] = None
+        self,
+        input_paths: Union[str, Path, List[Union[str, Path]]],
+        model_names: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         if model_names is None:
             available = self.factory.list_available_models()
@@ -127,21 +127,18 @@ class ASRManager:
         return stats
 
     def run_test(
-            self,
-            audio_path: str,
-            reference_path: str,
-            model_names: Optional[List[str]] = None
+        self,
+        audio_path: str,
+        reference_path: str,
+        model_names: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        # Load and clean reference text using extracted method
         reference_text = self._load_reference_text(reference_path)
         if reference_text is None:
             return []
-
         print(f"\n🧪 Running ASR Benchmark Test")
         print(f"📁 Audio: {audio_path}")
         print(f"📄 Reference: {reference_path}")
         print(f"📏 Reference length: {len(reference_text)} chars\n")
-
         if model_names is None:
             available = self.factory.list_available_models()
             model_names = [m.name for m in available]
@@ -197,10 +194,6 @@ class ASRManager:
         return results
 
     def _get_audio_duration(self, audio_path: str) -> float:
-        """
-        Get audio duration using moviepy.
-        Returns duration in seconds, or 0.0 if failed.
-        """
         clip = AudioFileClip(audio_path)
         duration = clip.duration
         clip.close()
@@ -208,12 +201,6 @@ class ASRManager:
 
     @staticmethod
     def _normalize_text_for_asr(text: str) -> str:
-        """
-        Standard ASR comparison normalization:
-        - lower case
-        - remove punctuation
-        - collapse whitespace
-        """
         if not text:
             return ""
         text = text.lower().strip()
@@ -222,30 +209,18 @@ class ASRManager:
         return text
 
     def _convert_numbers_to_digits(self, text: str) -> str:
-        """
-        Convert number words to digits (multi-language support).
-        Uses standard text2digits API.
-        """
         return self.t2d.convert(text)
 
     def calculate_asr_metrics(
-            self,
-            reference: str,
-            hypothesis: str
+        self,
+        reference: str,
+        hypothesis: str
     ) -> Dict[str, Any]:
-        """
-        Calculate ASR similarity with number normalization.
-        Uses jiwer for WER-based similarity and text2digits for number conversion.
-        """
         ref_norm = self._normalize_text_for_asr(reference)
         hyp_norm = self._normalize_text_for_asr(hypothesis)
-
         ref_digits = self._convert_numbers_to_digits(ref_norm)
         hyp_digits = self._convert_numbers_to_digits(hyp_norm)
-
-        # Calculate similarity using jiwer (WER -> similarity)
         similarity = max(0.0, 1.0 - wer(ref_digits, hyp_digits))
-
         return {
             'reference_normalized': ref_digits,
             'hypothesis_normalized': hyp_digits,
@@ -253,66 +228,47 @@ class ASRManager:
         }
 
     def _normalize_for_display(self, text: str) -> str:
-        """
-        Normalize text for display/comparison:
-        - Convert 'plus' to '+'
-        - Convert number words to digits (RU/EN) via text2digits
-        - Collapse digits in phone numbers (remove spaces between digit groups)
-        - Lowercase, remove extra whitespace
-        """
         if not text:
             return ""
-
-        # Lowercase and strip
         text = text.lower().strip()
-
-        # Replace common variants of 'plus' with '+'
         text = re.sub(r'\b(plus|\+)\b', '+', text)
-
-        # Convert number words to digits using text2digits
         text = self.t2d.convert(text)
-
-        # Collapse sequences of digits separated by spaces (phone numbers)
-        # e.g., "792 188 89 94 2" → "79218889942"
         text = re.sub(r'(\d)\s+(\d)', r'\1\2', text)
-        # Repeat to catch longer sequences
         text = re.sub(r'(\d)\s+(\d)', r'\1\2', text)
-
-        # Collapse whitespace
         text = re.sub(r'\s+', ' ', text).strip()
-
         return text
 
     def run_test2(
-            self,
-            test_cases: List[Dict[str, str]],
-            model_names: Optional[List[str]] = None
+        self,
+        test_cases: List[Dict[str, str]],
+        model_names: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """
-        Runs batch testing on multiple files with MODEL-FIRST loop.
-        Prints expected phrase once, then all model predictions below it.
-
-        Args:
-            test_cases: List of dicts, each containing {'audio': path, 'reference': path}
-            model_names: Optional list of model names to test. If None, uses all available.
-        """
         total_start = time.time()
-
         if not test_cases:
             print("❌ No test cases provided.")
             return {}
 
+        # ==========================================================
+        # DYNAMIC MODEL SELECTION BASED ON FILTER SWITCH
+        # ==========================================================
         if model_names is None:
-            available = self.factory.list_available_models()
-            model_names = [m.name for m in available]
+            mode = self.model_filter_mode
+            if mode == 'all':
+                available = self.factory.list_available_models()
+                model_names = [m.name for m in available]
+            else:
+                lang = 'ru' if mode == 'ru' else 'en'
+                factory_list = ASRModelFactory.GetModelsList(lang)
+                available = self.factory.list_available_models()
+                available_names = {m.name for m in available}
+                model_names = [m["model_name"] for m in factory_list if m["model_name"] in available_names]
+        # ==========================================================
 
         print(f"\n🚀 Starting Batch Test (run_test2) - Model-First Loop")
         print(f"📂 Total Files: {len(test_cases)}")
         print(f"🤖 Total Models: {len(model_names)}")
         print("-" * 60)
 
-        # Pre-load and clean all reference texts once
-        print(f"\n📚 Pre-loading reference texts...")
         reference_cache = {}
         for idx, case in enumerate(test_cases):
             ref_path = case.get('reference')
@@ -323,44 +279,30 @@ class ASRManager:
                 else:
                     print(f"   ⚠️  Could not load reference: {ref_path}")
 
-        # Filter out test cases with missing references
         valid_cases = [
             case for case in test_cases
             if case.get('reference') in reference_cache and os.path.exists(case.get('audio', ''))
         ]
-
         if not valid_cases:
             print("❌ No valid test cases after filtering.")
             return {}
-
         print(f"✅ Loaded {len(valid_cases)} valid test cases")
 
-        # Extract file names for column headers
         file_names = [Path(case.get('audio', '')).name for case in valid_cases]
-
-        # Structure to hold aggregated stats per model
         model_stats = {
             name: {'similarities': {}, 'times': {}, 'rtfs': [], 'successes': 0}
             for name in model_names
         }
         detailed_results = []
+        file_results = {case.get('audio'): {'reference': None, 'predictions': []} for case in valid_cases}
 
-        # Store results grouped by file for display
-        file_results = {case.get('audio'): {'reference': None, 'predictions': []}
-                        for case in valid_cases}
-
-        # === MODEL-FIRST LOOP ===
         for model_idx, model_name in enumerate(model_names, 1):
             print(f"\n{'=' * 70}")
             print(f"🤖 Model [{model_idx}/{len(model_names)}]: {model_name}")
             print(f"{'=' * 70}")
-
-            # Skip faulty models
             if self.factory.is_model_faulty(model_name):
                 print(f"⊘ SKIPPED: Model marked as faulty (>10 errors)")
                 continue
-
-            # Initialize model ONCE for all test cases
             start_init = time.time()
             model = self.factory.create(model_name)
             if model is None:
@@ -369,26 +311,20 @@ class ASRManager:
             init_time = time.time() - start_init
             print(f"{datetime.now().isoformat(timespec='milliseconds')} Model loaded in {init_time:.2f}s")
 
-            # Process ALL test cases with this initialized model
             for case_idx, case in enumerate(valid_cases, 1):
                 audio_path = case.get('audio')
                 reference_path = case.get('reference')
                 reference_text = reference_cache.get(reference_path)
                 file_name = Path(audio_path).name
-
                 if not reference_text:
                     print(f"   ⚠️  [{case_idx}/{len(valid_cases)}] Skipping: no reference text")
                     continue
-
                 print(f"   📁 [{case_idx}/{len(valid_cases)}] {file_name}", end=" ... ")
-
                 start_infer = time.time()
                 success = False
                 similarity = 0.0
                 elapsed = 0.0
                 predicted_text = ""
-
-                # Suppress verbose [Process]/[Audio] logs from model.process()
                 old_stdout = sys.stdout
                 sys.stdout = StringIO()
                 try:
@@ -398,26 +334,19 @@ class ASRManager:
                     continue
                 finally:
                     sys.stdout = old_stdout
-
                 elapsed = time.time() - start_infer
-
                 metrics = self.calculate_asr_metrics(reference_text, predicted_text)
                 similarity = metrics['similarity']
-
                 success = True
                 model_stats[model_name]['successes'] += 1
                 model_stats[model_name]['similarities'][file_name] = similarity
                 model_stats[model_name]['times'][file_name] = elapsed
-
-                # Calculate RTF (avg_t component) using moviepy
                 rtf = 0.0
                 duration = self._get_audio_duration(audio_path)
                 if duration > 0:
                     rtf = elapsed / duration
-
                 model_stats[model_name]['rtfs'].append(rtf)
 
-                # Store for grouped display
                 if file_results[audio_path]['reference'] is None:
                     file_results[audio_path]['reference'] = self._normalize_for_display(reference_text)
                 file_results[audio_path]['predictions'].append({
@@ -427,10 +356,8 @@ class ASRManager:
                     'time': elapsed,
                     'rtf': rtf
                 })
-
                 status_icon = "✓" if similarity > 0.5 else "⚠"
                 print(f"{status_icon} Sim={similarity:.4f}")
-
                 detailed_results.append({
                     'file': file_name,
                     'model': model_name,
@@ -441,11 +368,9 @@ class ASRManager:
                     'predicted': predicted_text[:100] + "..." if len(predicted_text) > 100 else predicted_text
                 })
 
-        # === Print Grouped Results: Expected + All Model Predictions ===
         print(f"\n{'=' * 80}")
         print(f"📄 RESULTS BY FILE (Expected + All Models)")
         print(f"{'=' * 80}")
-
         for audio_path, data in file_results.items():
             file_name = Path(audio_path).name
             print(f"\n📁 File: {file_name}")
@@ -453,29 +378,21 @@ class ASRManager:
             for pred in data['predictions']:
                 print(f"      {pred['predicted_normalized']} --- {pred['model']}")
 
-        # === Build Summary Table (only models with at least 1 success) ===
         print(f"\n{'=' * 80}")
         print(f"📊 COMBINED STATISTICS (All Files)")
         print(f"{'=' * 80}")
-
         summary_rows = []
         for model_name in model_names:
             stats = model_stats[model_name]
-
-            # Skip models with no successful results
             if stats['successes'] == 0:
                 continue
-
             similarities = list(stats['similarities'].values())
             times = list(stats['times'].values())
             rtfs = stats['rtfs']
-
             avg_sim = sum(similarities) / len(similarities) if similarities else 0.0
             min_time = min(times) if times else 0.0
             max_time = max(times) if times else 0.0
             avg_t = sum(rtfs) / len(rtfs) if rtfs else 0.0
-
-            # Calculate similarity thresholds
             sim_70 = sum(1 for s in similarities if s > 0.7)
             sim_80 = sum(1 for s in similarities if s > 0.8)
             sim_90 = sum(1 for s in similarities if s > 0.9)
@@ -483,7 +400,6 @@ class ASRManager:
             sim_97 = sum(1 for s in similarities if s > 0.97)
             sim_98 = sum(1 for s in similarities if s > 0.98)
             sim_99 = sum(1 for s in similarities if s > 0.99)
-
             summary_rows.append({
                 'model_name': model_name,
                 'avg_sim': avg_sim,
@@ -500,19 +416,13 @@ class ASRManager:
                 'file_similarities': stats['similarities'],
                 'successes': stats['successes']
             })
-
-        # Sort by Avg Similarity DESC
         summary_rows.sort(key=lambda x: x['avg_sim'], reverse=True)
-
-        # Build header with file columns
         header = f"{'Model Name':<45} {'AvgSim':>7} {'Avg_t':>7} {'>0.7':>5} {'>0.8':>5} {'>0.9':>5} {'>0.95':>5} {'>0.97':>5} {'>0.98':>5} {'>0.99':>5} {'MinT':>6} {'MaxT':>6}"
         for fn in file_names:
             display_name = fn[:10] + ".." if len(fn) > 12 else fn
             header += f" {display_name:>12}"
-
         print(header)
         print("-" * len(header))
-
         for row in summary_rows:
             line = f"{row['model_name']:<45} {row['avg_sim']:>7.4f} {row['avg_t']:>7.2f} {row['sim_70']:>5} {row['sim_80']:>5} {row['sim_90']:>5} {row['sim_95']:>5} {row['sim_97']:>5} {row['sim_98']:>5} {row['sim_99']:>5} {row['min_time']:>6.2f} {row['max_time']:>6.2f}"
             for fn in file_names:
@@ -520,7 +430,6 @@ class ASRManager:
                 line += f" {sim:>12.4f}"
             print(line)
 
-        # Save Statistics
         stats_payload = {
             'test_type': 'batch_run_test2_model_first',
             'total_files': len(valid_cases),
@@ -531,10 +440,8 @@ class ASRManager:
         }
         self.factory.save_statistics(stats_payload)
         print(f"\n💾 Statistics saved to {self.factory.stats_path}")
-
         total_elapsed = time.time() - total_start
         print(f"\n⏱ Total Run Time: {total_elapsed:.2f} seconds")
-
         return stats_payload
 
     @staticmethod
@@ -543,7 +450,6 @@ class ASRManager:
             return 1.0
         if not s1 or not s2:
             return 0.0
-
         def levenshtein_distance(a: str, b: str) -> int:
             if len(a) < len(b):
                 a, b = b, a
@@ -557,7 +463,6 @@ class ASRManager:
                     current_row.append(min(insertions, deletions, substitutions))
                 previous_row = current_row
             return previous_row[-1]
-
         distance = levenshtein_distance(s1.lower(), s2.lower())
         max_len = max(len(s1), len(s2))
         return 1.0 - (distance / max_len)
