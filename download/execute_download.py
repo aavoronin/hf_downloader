@@ -24,6 +24,19 @@ def execute_download():
         lister.show_results()
     """
 
+    start_urls = [
+        #"https://huggingface.co/models?pipeline_tag=text-generation&num_parameters=min:0,max:6B&sort=likes&search=sql",
+        #"https://huggingface.co/models?pipeline_tag=text-generation&num_parameters=min:0,max:6B&library=transformers&sort=likes&search=pip-sql",
+        #"https://huggingface.co/models?pipeline_tag=text-generation&num_parameters=min:0,max:6B&library=transformers&sort=likes&search=text-to-SQL",
+        #"https://huggingface.co/models?pipeline_tag=text-generation&num_parameters=min:0,max:6B&library=pytorch&sort=likes&search=sql"
+        #"https://huggingface.co/models?pipeline_tag=text-generation&num_parameters=min:0,max:6B&library=gguf&sort=likes&search=sql-GGUF",
+        #"https://huggingface.co/models?pipeline_tag=text-generation&num_parameters=min:0,max:6B&sort=likes&search=code",
+        "https://huggingface.co/models?pipeline_tag=text-generation&num_parameters=min:0,max:6B&sort=likes&search=SQL"
+    ]
+    root_folder = r"D:\AIs\text-to-sql"
+    HFModelLister.MAX_PAGES = 10
+    download_certain_type_of_models(root_folder, start_urls)
+    return
 
     start_urls = ["https://huggingface.co/models?pipeline_tag=any-to-any&sort=downloads"]
     root_folder = r"D:\AIs\Any-to-Any"
