@@ -4,6 +4,16 @@ from typing import Union, Dict, Any, Callable
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, AutoConfig
 
+# Try to import llama_cpp for GGUF support
+try:
+    from llama_cpp import Llama
+
+    LLAMA_CPP_AVAILABLE = True
+except ImportError:
+    Llama = None
+    LLAMA_CPP_AVAILABLE = False
+
+
 # =============================================================================
 # CUSTOM MODEL REGISTRY
 # =============================================================================
@@ -28,11 +38,13 @@ def _init_default_causal(model_path: str, device: str) -> Dict[str, Any]:
     ).to(device)
     return {"model": model, "tokenizer": tokenizer}
 
+
 def _parse_pip_sql_output(text: str) -> str:
     """Extract SQL content between <sql> and </sql> tags."""
     if "<sql>" in text and "</sql>" in text:
         return text.split('<sql>')[1].split('</sql>')[0].strip()
     return text.strip()
+
 
 def _init_pip_sql(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for pip-sql models."""
@@ -51,9 +63,9 @@ def _init_pip_sql(model_path: str, device: str) -> Dict[str, Any]:
     ).to(device)
     return {"model": model, "tokenizer": tokenizer}
 
+
 def _parse_qwen_sql_output(text: str) -> str:
     """Extract SQL from Qwen model output - return text after prompt."""
-    # Qwen models may repeat the prompt; find where generation starts
     sql_keywords = ["SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "WITH"]
     upper_text = text.upper()
     for kw in sql_keywords:
@@ -62,15 +74,15 @@ def _parse_qwen_sql_output(text: str) -> str:
             return text[idx:].strip()
     return text.strip()
 
+
 def _init_qwen_sql(model_path: str, device: str) -> Dict[str, Any]:
-    """Custom initialization for Qwen Text-to-SQL models (supports standard & GGUF)."""
+    """Custom initialization for Qwen Text-to-SQL models (standard PyTorch)."""
     tokenizer = AutoTokenizer.from_pretrained(
         model_path, local_files_only=True, trust_remote_code=True
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     dtype = torch.float16 if device == "cuda" else torch.float32
-    # Modern transformers automatically handles GGUF format if detected
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
         local_files_only=True,
@@ -79,6 +91,39 @@ def _init_qwen_sql(model_path: str, device: str) -> Dict[str, Any]:
         trust_remote_code=True
     ).to(device)
     return {"model": model, "tokenizer": tokenizer}
+
+
+def _init_qwen_gguf(model_path: str, device: str) -> Dict[str, Any]:
+    """Custom initialization for Qwen GGUF models using llama-cpp-python."""
+    if not LLAMA_CPP_AVAILABLE:
+        raise ImportError("llama-cpp-python is required for GGUF models. Install with: pip install llama-cpp-python")
+
+    # Find the actual .gguf file in the folder
+    gguf_files = list(Path(model_path).glob("*.gguf"))
+    if not gguf_files:
+        raise FileNotFoundError(f"No .gguf file found in {model_path}")
+
+    gguf_path = str(gguf_files[0])
+    print(f"   [GGUF] Loading {gguf_path} via llama-cpp-python...")
+
+    # Determine GPU layers: -1 for all on GPU if CUDA available, 0 for CPU
+    n_gpu_layers = -1 if device == "cuda" else 0
+
+    # Increase context if needed (default: 4096, max: 262144 for this model)
+    n_ctx = 262144  # or 16384, 32768, etc. - but higher = more VRAM
+
+    llm = Llama(
+        model_path=gguf_path,
+        n_ctx=n_ctx,  # ← Increase this value
+        n_gpu_layers=n_gpu_layers,
+        verbose=False
+    )
+    return {"llm": llm, "is_gguf": True}
+
+def _parse_gguf_output(text: str) -> str:
+    """Parse GGUF model output - return stripped text."""
+    return text.strip()
+
 
 # Registry mapping identifier strings to their handlers
 CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
@@ -89,10 +134,11 @@ CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default_max_tokens": 200
     },
     "Qwen-3-4b-Text_to_SQL-GGUF": {
-        "description": "Qwen-3 Text-to-SQL model (GGUF or standard)",
-        "init_fn": _init_qwen_sql,
-        "parse_fn": _parse_qwen_sql_output,
-        "default_max_tokens": 512
+        "description": "Qwen-3 Text-to-SQL model (GGUF format, uses llama-cpp-python)",
+        "init_fn": _init_qwen_gguf,
+        "parse_fn": _parse_gguf_output,
+        "default_max_tokens": 256,
+        "use_gguf": True
     },
     "Qwen-2.5-3b-Text_to_SQL": {
         "description": "Qwen-2.5 Text-to-SQL model",
@@ -101,6 +147,8 @@ CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default_max_tokens": 512
     },
 }
+
+
 # =============================================================================
 
 class TextToTextModel:
@@ -194,6 +242,23 @@ class TextToTextModel:
         try:
             if self._custom_config:
                 max_t = self._custom_config.get("default_max_tokens", max_new_tokens)
+
+                # Handle GGUF models via llama-cpp-python
+                if self._custom_config.get("use_gguf"):
+                    if not LLAMA_CPP_AVAILABLE:
+                        raise RuntimeError("llama-cpp-python not available for GGUF model")
+                    llm = self._custom_objects["llm"]
+                    out = llm(
+                        prompt,
+                        max_tokens=max_t,
+                        temperature=0.2,
+                        top_p=0.9,
+                        echo=False
+                    )
+                    generated_text = out["choices"][0]["text"]
+                    return self._custom_config["parse_fn"](generated_text)
+
+                # Handle standard custom models
                 tokenizer = self._custom_objects["tokenizer"]
                 model = self._custom_objects["model"]
                 inputs = tokenizer(prompt, return_tensors="pt").to(self._device)

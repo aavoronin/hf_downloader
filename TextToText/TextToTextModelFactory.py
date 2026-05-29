@@ -6,7 +6,6 @@ from typing import Dict, Optional, List, Any
 from dataclasses import dataclass, asdict
 from TextToText.TextToTextModel import TextToTextModel
 
-
 @dataclass
 class TextToTextModelErrorLog:
     model_name: str
@@ -21,7 +20,6 @@ class TextToTextModelErrorLog:
     def from_dict(cls, data: dict):
         return cls(**data)
 
-
 @dataclass
 class TextToTextModelInfo:
     name: str
@@ -34,13 +32,11 @@ class TextToTextModelInfo:
     def to_dict(self) -> dict:
         return asdict(self)
 
-
 GLOBAL_CONFIG = {
     "max_errors_threshold": 20,
     "config_filename": "text2text_config.json",
     "stats_filename": "text2text_stats.json"
 }
-
 
 class TextToTextModelFactory:
     def __init__(self, root_folder: str):
@@ -89,20 +85,17 @@ class TextToTextModelFactory:
         if self.is_model_faulty(model_name):
             print(f"⊘ Skipping faulty model: {model_name}")
             return None
-
         model_folder = self._find_model_folder(model_name)
         if not model_folder:
             error_msg = f"Model folder not found: {model_name}"
             print(f"❌ {error_msg}")
             self._log_error(model_name, error_msg)
             return None
-
         if not self._verify_model_files(model_folder):
             error_msg = "Model files verification failed"
             print(f"❌ {error_msg} - Path: {model_folder}")
             self._log_error(model_name, error_msg)
             return None
-
         try:
             print(f"   Attempting to initialize TextToTextModel...")
             model = TextToTextModel(model_path=model_folder, model_name=model_name)
@@ -128,18 +121,18 @@ class TextToTextModelFactory:
 
     def _verify_model_files(self, folder: Path) -> bool:
         files = [f.name.lower() for f in folder.rglob('*') if f.is_file()]
-
-        # Modern transformers supports GGUF natively, so we allow it
+        # GGUF models: only need the .gguf file, no config.json required
         if any(f.endswith('.gguf') for f in files):
-            print(f"   ⚠ Detected GGUF model (transformers will handle loading)")
-
+            print(f"   ⚠ Detected GGUF model (will use llama-cpp-python)")
+            has_gguf = any(f.endswith('.gguf') for f in files)
+            print(f"   GGUF file found: {has_gguf}")
+            return has_gguf
         # Skip ONNX-only models
         if any(f.endswith('.onnx') for f in files) and not any(
-                f.endswith(('.safetensors', '.bin', '.pt', '.pth')) or 'pytorch_model' in f for f in files
+            f.endswith(('.safetensors', '.bin', '.pt', '.pth')) or 'pytorch_model' in f for f in files
         ):
             print(f"   ⚠ Skipping ONNX-only model (not compatible with PyTorch)")
             return False
-
         has_config = any('config.json' in f for f in files)
         has_weights = any(
             f.endswith(('.safetensors', '.bin', '.pt', '.pth', '.gguf')) or 'pytorch_model' in f for f in files
