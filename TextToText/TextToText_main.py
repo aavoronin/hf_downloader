@@ -5,110 +5,107 @@ from TextToText.TextToTextModelFactory import TextToTextModelFactory
 def TextToText_main():
     root_folder = r"D:\AIs\text-to-sql"
     manager = TextToTextModelFactory(root_folder)
-    print("📦 Доступные модели:")
+    print("📦 Available models:")
     models = manager.list_available_models()
     for i, model in enumerate(models, 1):
         print(f"{i}. {model.name} - {model.size_human}")
 
-    test_prompt = (
-        "Convert from Oracle from Greenplum 6.30\n"
-        "=========TEST CASE========\n"
-        "-- ==========================================\n"
-        "-- 1) CREATE TABLE\n"
-        "-- ==========================================\n"
-        "CREATE TABLE demo_table (\n"
-        "    id_int   NUMBER(10),\n"
-        "    val_float NUMBER(12,4),\n"
-        "    txt_var  VARCHAR2(255)\n"
-        ");\n"
-        "COMMIT;\n"
-        "-- ==========================================\n"
-        "-- 2) SELECT int, float, string FROM DUAL\n"
-        "-- ==========================================\n"
-        "SELECT \n"
-        "    42            AS int_val,\n"
-        "    3.14159       AS float_val,\n"
-        "    'Oracle Text' AS string_val\n"
-        "FROM DUAL;\n"
-        "-- ==========================================\n"
-        "-- 3) INSERT ONE ROW INTO TABLE (from #1)\n"
-        "-- ==========================================\n"
-        "INSERT INTO demo_table (id_int, val_float, txt_var)\n"
-        "VALUES (101, 99.9500, 'Inserted row');\n"
-        "COMMIT;\n"
-        "-- ==========================================\n"
-        "-- 4) DELETE FROM TABLE (from #1)\n"
-        "-- ==========================================\n"
-        "DELETE FROM demo_table;\n"
-        "COMMIT;\n"
-        "=========END TEST CASE========="
-    )
+    instruction = """
+        Convert this code from Oracle to Greenplum 6.30
+        Do not add extra code. 
+        Make distribution as distributed randomly in tables. 
+        """
+    test_cases_sql = [
+        "CREATE TABLE demo_table (\n    id_int   NUMBER(10),\n    val_float NUMBER(12,4),\n    txt_var  VARCHAR2(255)\n);\nCOMMIT;",
+        "SELECT \n    42            AS int_val,\n    3.14159       AS float_val,\n    'Oracle Text' AS string_val\nFROM DUAL;",
+        "INSERT INTO demo_table (id_int, val_float, txt_var)\nVALUES (101, 99.9500, 'Inserted row');\nCOMMIT;",
+        "DELETE FROM demo_table;\nCOMMIT;"
+    ]
+    test_prompts = [instruction + case for case in test_cases_sql]
 
     if not models:
-        print("❌ Модели не найдены. Проверьте путь.")
+        print("❌ No models found. Check the path.")
         return
 
-    print(f"\n🚀 Запуск тестирования генерации текста...")
-    print(f"📄 Длина запроса: {len(test_prompt)} символов\n")
-
+    print(f"\n🚀 Starting text generation testing...")
     results = []
+
     for model_info in models:
         model_name = model_info.name
         if manager.is_model_faulty(model_name):
-            print(f"⊘ {model_name}: ПРОПУЩЕНО (превышен лимит ошибок)")
+            print(f"⊘ {model_name}: SKIPPED (error limit exceeded)")
             continue
-
         start_time = time.time()
         try:
             print(f"\n{'=' * 60}")
-            print(f" Тестирование: {model_name}")
+            print(f" Testing: {model_name}")
             print(f"{'=' * 60}")
             model = manager.create(model_name)
             if model is None:
-                print(f"✗ {model_name}: НЕ УДАЛОСЬ инициализировать")
-                manager._log_error(model_name, "Инициализация вернула None")
+                print(f"✗ {model_name}: FAILED to initialize")
+                manager._log_error(model_name, "Initialization returned None")
+                # All 4 cases failed due to init failure
+                print(f"Test Results: 0 0 0 0 | Overall: 0")
                 results.append({
                     'model_name': model_name, 'success': False,
-                    'time_taken': time.time() - start_time, 'output': ''
+                    'time_taken': time.time() - start_time, 'output': '',
+                    'case_results': [0, 0, 0, 0]
                 })
                 continue
 
-            predicted_text = model.process(test_prompt)
-            elapsed = time.time() - start_time
+            case_results = []
+            model_results = []
+            for i, prompt in enumerate(test_prompts, 1):
+                case_start = time.time()
+                print(f"\n--- Test Case {i} ---")
+                try:
+                    predicted_text = model.process(prompt)
+                    elapsed_case = time.time() - case_start
+                    # Check if result is non-empty to count as success
+                    case_success = 1 if predicted_text and len(predicted_text.strip()) > 0 else 0
+                    case_results.append(case_success)
+                    # Print output for each case individually, limited to 2000 symbols
+                    output_preview = predicted_text[:2000] if predicted_text else ""
+                    print(f"Result Case {i}:\n{output_preview}")
+                    print(f"Time: {elapsed_case:.2f}s | Status: {case_success}")
+                    model_results.append(predicted_text)
+                except Exception as e:
+                    print(f"Failed Case {i}: {str(e)}")
+                    case_results.append(0)
+                    model_results.append("")
 
-            if not predicted_text or len(predicted_text.strip()) == 0:
-                print(f"⚠ {model_name}: Пустой вывод")
-                manager._log_error(model_name, "Пустой вывод")
-                results.append({
-                    'model_name': model_name, 'success': False,
-                    'time_taken': elapsed, 'output': ''
-                })
-                continue
-
-            print(f"\n📝 Вывод (первые 200 символов): {predicted_text[:200]}...")
+            # Overall success only if ALL 4 test cases succeeded
+            overall_success = 1 if all(r == 1 for r in case_results) else 0
+            total_elapsed = time.time() - start_time
             print(f"\n✓ {model_name}")
-            print(f"  Время: {elapsed:.2f}с")
+            print(f"  Test Results: {' '.join(str(r) for r in case_results)} | Overall: {overall_success}")
+            print(f"  Total time: {total_elapsed:.2f}s")
             results.append({
-                'model_name': model_name, 'success': True,
-                'time_taken': elapsed, 'output': predicted_text
+                'model_name': model_name, 'success': overall_success == 1,
+                'time_taken': total_elapsed, 'output': model_results,
+                'case_results': case_results
             })
         except Exception as e:
             elapsed = time.time() - start_time
-            print(f"\n✗ {model_name}: ОШИБКА")
-            print(f"  Ошибка: {str(e)}")
+            print(f"\n✗ {model_name}: ERROR")
+            print(f"  Error: {str(e)}")
             manager._log_error(model_name, str(e))
+            # All cases failed due to exception
+            print(f"Test Results: 0 0 0 0 | Overall: 0")
             results.append({
                 'model_name': model_name, 'success': False,
-                'time_taken': elapsed, 'output': ''
+                'time_taken': elapsed, 'output': '',
+                'case_results': [0, 0, 0, 0]
             })
 
-    print(f"\n📊 Итоги тестирования")
-    print(f"{'Модель':<45} {'Статус':<10} {'Время (с)':<10}")
-    print("-" * 65)
+    print(f"\n📊 Testing Summary")
+    print(f"{'Model':<45} {'Case1':<6} {'Case2':<6} {'Case3':<6} {'Case4':<6} {'Overall':<8} {'Time (s)':<10}")
+    print("-" * 95)
     for r in results:
-        status = "УСПЕХ" if r['success'] else "ОШИБКА"
-        print(f"{r['model_name']:<45} {status:<10} {r['time_taken']:<10.2f}")
+        cases = r.get('case_results', [0, 0, 0, 0])
+        overall = 1 if r['success'] else 0
+        print(f"{r['model_name']:<45} {cases[0]:<6} {cases[1]:<6} {cases[2]:<6} {cases[3]:<6} {overall:<8} {r['time_taken']:<10.2f}")
 
     stats = {'test_type': 'text_to_sql_prompt', 'results': results}
     manager.save_statistics(stats)
-    print(f"\n💾 Статистика сохранена в {manager.stats_path}")
+    print(f"\n💾 Statistics saved to {manager.stats_path}")
