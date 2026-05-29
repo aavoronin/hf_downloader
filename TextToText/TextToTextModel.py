@@ -4,6 +4,21 @@ from typing import Union, Dict, Any, Callable
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, AutoConfig
 
+# Optional import for prem-research/premsql library
+try:
+    from premsql.agents import BaseLineAgent
+    from premsql.generators import Text2SQLGeneratorHF
+    from premsql.agents.tools import SimpleMatplotlibTool
+    from premsql.executors import SQLiteExecutor
+
+    PREMSQL_AVAILABLE = True
+except ImportError:
+    PREMSQL_AVAILABLE = False
+    BaseLineAgent = None
+    Text2SQLGeneratorHF = None
+    SimpleMatplotlibTool = None
+    SQLiteExecutor = None
+
 # Try to import llama_cpp for GGUF support
 try:
     from llama_cpp import Llama
@@ -66,7 +81,8 @@ def _init_pip_sql(model_path: str, device: str) -> Dict[str, Any]:
 
 def _parse_qwen_sql_output(text: str) -> str:
     """Extract SQL from Qwen model output - return text after prompt."""
-    sql_keywords = ["SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "WITH"]
+    sql_keywords = ["SELECT", "INSERT", "UPDATE", "DELETE", "CREATE",
+                    "DROP", "ALTER", "WITH"]
     upper_text = text.upper()
     for kw in sql_keywords:
         idx = upper_text.find(kw)
@@ -96,7 +112,8 @@ def _init_qwen_sql(model_path: str, device: str) -> Dict[str, Any]:
 def _init_qwen_gguf(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for Qwen GGUF models using llama-cpp-python."""
     if not LLAMA_CPP_AVAILABLE:
-        raise ImportError("llama-cpp-python is required for GGUF models. Install with: pip install llama-cpp-python")
+        raise ImportError("llama-cpp-python is required for GGUF models. "
+                          "Install with: pip install llama-cpp-python")
 
     # Find the actual .gguf file in the folder
     gguf_files = list(Path(model_path).glob("*.gguf"))
@@ -110,19 +127,123 @@ def _init_qwen_gguf(model_path: str, device: str) -> Dict[str, Any]:
     n_gpu_layers = -1 if device == "cuda" else 0
 
     # Increase context if needed (default: 4096, max: 262144 for this model)
-    n_ctx = 262144  # or 16384, 32768, etc. - but higher = more VRAM
+    n_ctx = 262144
 
     llm = Llama(
         model_path=gguf_path,
-        n_ctx=n_ctx,  # ← Increase this value
+        n_ctx=n_ctx,
         n_gpu_layers=n_gpu_layers,
         verbose=False
     )
     return {"llm": llm, "is_gguf": True}
 
+
 def _parse_gguf_output(text: str) -> str:
     """Parse GGUF model output - return stripped text."""
     return text.strip()
+
+
+def _init_prem_sql(model_path: str, device: str) -> Dict[str, Any]:
+    """Custom initialization for prem-research/prem-1B-SQL using premsql."""
+    if not PREMSQL_AVAILABLE:
+        raise ImportError("premsql library is required for prem-1B-SQL. "
+                          "Install with: pip install premsql")
+
+    # Initialize the Text2SQL generator
+    text2sql_model = Text2SQLGeneratorHF(
+        model_or_name_or_path=model_path,
+        experiment_name="text2text_runner",
+        device=device,
+        type="inference"
+    )
+
+    # Initialize analyzer/plotter model (using same path for simplicity)
+    analyser_model = Text2SQLGeneratorHF(
+        model_or_name_or_path=model_path,
+        experiment_name="text2text_runner",
+        device=device,
+        type="inference"
+    )
+
+    # Create agent with SQLite executor
+    agent = BaseLineAgent(
+        session_name="text2text_session",
+        db_connection_uri="sqlite:///:memory:",
+        specialized_model1=text2sql_model,
+        specialized_model2=analyser_model,
+        plot_tool=SimpleMatplotlibTool(),
+        executor=SQLiteExecutor()
+    )
+
+    return {"agent": agent, "is_prem": True}
+
+
+def _parse_prem_sql_output(text: str) -> str:
+    """Parse prem-sql output - agent returns dataframe, extract SQL if present."""
+    # prem agent may return dataframe or dict; try to extract SQL string
+    if hasattr(text, 'show_dataframe'):
+        return str(text)
+    return str(text).strip()
+
+
+def _parse_antelope_output(text: str) -> str:
+    """Parse Antelope model output - extract SQL after ### SQL: prefix."""
+    if "### SQL:" in text:
+        # Get content after ### SQL: and take first line
+        sql_part = text.split("### SQL:")[-1].strip()
+        return sql_part.split('\n')[0].strip()
+    return text.strip()
+
+
+def _init_antelope_sql(model_path: str, device: str) -> Dict[str, Any]:
+    """Custom initialization for AuricErgeson/Antelope-textTosql."""
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path, local_files_only=True, trust_remote_code=True
+    )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    dtype = torch.float16 if device == "cuda" else torch.float32
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        local_files_only=True,
+        torch_dtype=dtype,
+        low_cpu_mem_usage=True,
+        device_map="auto" if device == "cuda" else None,
+        trust_remote_code=True
+    )
+    if device == "cuda" and not hasattr(model, 'device'):
+        model = model.to(device)
+    return {"model": model, "tokenizer": tokenizer}
+
+
+def _parse_gemma_sql_output(text: str) -> str:
+    """Parse Gemma-style SQL output - extract model answer after turn tags."""
+    # Split on end_of_turn and take first two parts
+    parts = text.split('<end_of_turn>')[:2]
+    ans = ''.join(parts)
+    # Extract model answer after "model" keyword
+    if "model" in ans:
+        model_answer = ans.split("model")[1].strip()
+        return model_answer
+    return text.strip()
+
+
+def _init_gemma_sql(model_path: str, device: str) -> Dict[str, Any]:
+    """Custom initialization for suriya7/Gemma2B-Finetuned-Sql-Generator."""
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path, local_files_only=True, trust_remote_code=True
+    )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    dtype = torch.float16 if device == "cuda" else torch.float32
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        local_files_only=True,
+        torch_dtype=dtype,
+        low_cpu_mem_usage=True,
+        trust_remote_code=True
+    ).to(device)
+    return {"model": model, "tokenizer": tokenizer}
 
 
 # Registry mapping identifier strings to their handlers
@@ -132,6 +253,19 @@ CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "init_fn": _init_pip_sql,
         "parse_fn": _parse_pip_sql_output,
         "default_max_tokens": 200
+    },
+    "pip-sql-1.3b-GGUF": {
+        "description": "QuantFactory/pip-sql-1.3b-GGUF with tag-based parsing",
+        "init_fn": _init_pip_sql,
+        "parse_fn": _parse_pip_sql_output,
+        "default_max_tokens": 200
+    },
+    "prem-1B-SQL": {
+        "description": "prem-research/prem-1B-SQL using premsql agent framework",
+        "init_fn": _init_prem_sql,
+        "parse_fn": _parse_prem_sql_output,
+        "default_max_tokens": 512,
+        "use_prem": True
     },
     "Qwen-3-4b-Text_to_SQL-GGUF": {
         "description": "Qwen-3 Text-to-SQL model (GGUF format, uses llama-cpp-python)",
@@ -145,6 +279,18 @@ CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "init_fn": _init_qwen_sql,
         "parse_fn": _parse_qwen_sql_output,
         "default_max_tokens": 512
+    },
+    "Antelope-textTosql": {
+        "description": "AuricErgeson/Antelope-textTosql with custom prompt format",
+        "init_fn": _init_antelope_sql,
+        "parse_fn": _parse_antelope_output,
+        "default_max_tokens": 128
+    },
+    "Gemma2B-Finetuned-Sql-Generator": {
+        "description": "suriya7/Gemma2B-Finetuned-Sql-Generator with Gemma chat template",
+        "init_fn": _init_gemma_sql,
+        "parse_fn": _parse_gemma_sql_output,
+        "default_max_tokens": 1000
     },
 }
 
@@ -224,7 +370,8 @@ class TextToTextModel:
         except ImportError as e:
             if "cannot import name" in str(e) or "initialization" in str(e):
                 print(f"   ⚠ Transformers compatibility error: {e}")
-                raise RuntimeError(f"Model {self.model_name} incompatible with transformers version")
+                raise RuntimeError(f"Model {self.model_name} incompatible with "
+                                   f"transformers version")
             raise
         except ValueError as e:
             if "not supported" in str(e).lower() or "architecture" in str(e).lower():
@@ -242,6 +389,17 @@ class TextToTextModel:
         try:
             if self._custom_config:
                 max_t = self._custom_config.get("default_max_tokens", max_new_tokens)
+
+                # Handle prem-sql models via premsql agent
+                if self._custom_config.get("use_prem"):
+                    if not PREMSQL_AVAILABLE:
+                        raise RuntimeError("premsql not available for prem model")
+                    agent = self._custom_objects["agent"]
+                    # prem agent expects query string, returns response object
+                    response = agent(prompt)
+                    if hasattr(response, 'show_dataframe'):
+                        return str(response.show_dataframe())
+                    return str(response).strip()
 
                 # Handle GGUF models via llama-cpp-python
                 if self._custom_config.get("use_gguf"):
