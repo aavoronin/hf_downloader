@@ -246,6 +246,64 @@ def _init_gemma_sql(model_path: str, device: str) -> Dict[str, Any]:
     return {"model": model, "tokenizer": tokenizer}
 
 
+def _init_gemma_gguf(model_path: str, device: str) -> Dict[str, Any]:
+    """Custom initialization for Gemma GGUF models using llama-cpp-python."""
+    if not LLAMA_CPP_AVAILABLE:
+        raise ImportError("llama-cpp-python is required for GGUF models. "
+                          "Install with: pip install llama-cpp-python")
+
+    # Find the actual .gguf file in the folder
+    gguf_files = list(Path(model_path).glob("*.gguf"))
+    if not gguf_files:
+        raise FileNotFoundError(f"No .gguf file found in {model_path}")
+
+    gguf_path = str(gguf_files[0])
+    print(f"   [GGUF] Loading {gguf_path} via llama-cpp-python...")
+
+    # Determine GPU layers: -1 for all on GPU if CUDA available, 0 for CPU
+    n_gpu_layers = -1 if device == "cuda" else 0
+
+    # Use reasonable context for Gemma models
+    n_ctx = 4096
+
+    llm = Llama(
+        model_path=gguf_path,
+        n_ctx=n_ctx,
+        n_gpu_layers=n_gpu_layers,
+        verbose=False
+    )
+    return {"llm": llm, "is_gguf": True}
+
+
+def _init_bagel_gguf(model_path: str, device: str) -> Dict[str, Any]:
+    """Custom initialization for calcuis/bagel-gguf using llama-cpp-python."""
+    if not LLAMA_CPP_AVAILABLE:
+        raise ImportError("llama-cpp-python is required for GGUF models. "
+                          "Install with: pip install llama-cpp-python")
+
+    # Find the actual .gguf file in the folder
+    gguf_files = list(Path(model_path).glob("*.gguf"))
+    if not gguf_files:
+        raise FileNotFoundError(f"No .gguf file found in {model_path}")
+
+    gguf_path = str(gguf_files[0])
+    print(f"   [GGUF] Loading {gguf_path} via llama-cpp-python...")
+
+    # Determine GPU layers: -1 for all on GPU if CUDA available, 0 for CPU
+    n_gpu_layers = -1 if device == "cuda" else 0
+
+    # Use large context for Bagel models
+    n_ctx = 8192
+
+    llm = Llama(
+        model_path=gguf_path,
+        n_ctx=n_ctx,
+        n_gpu_layers=n_gpu_layers,
+        verbose=False
+    )
+    return {"llm": llm, "is_gguf": True}
+
+
 # Registry mapping identifier strings to their handlers
 CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "pip-sql-1.3b": {
@@ -291,6 +349,20 @@ CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "init_fn": _init_gemma_sql,
         "parse_fn": _parse_gemma_sql_output,
         "default_max_tokens": 1000
+    },
+    "Gemma2B-Finetuned-Sql-Generator-GGUF": {
+        "description": "Gemma2B-Finetuned-Sql-Generator (GGUF format, uses llama-cpp-python)",
+        "init_fn": _init_gemma_gguf,
+        "parse_fn": _parse_gemma_sql_output,
+        "default_max_tokens": 1000,
+        "use_gguf": True
+    },
+    "bagel-gguf": {
+        "description": "calcuis/bagel-gguf model (GGUF format, uses llama-cpp-python)",
+        "init_fn": _init_bagel_gguf,
+        "parse_fn": _parse_gguf_output,
+        "default_max_tokens": 512,
+        "use_gguf": True
     },
 }
 
