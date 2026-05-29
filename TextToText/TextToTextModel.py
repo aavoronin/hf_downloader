@@ -51,6 +51,35 @@ def _init_pip_sql(model_path: str, device: str) -> Dict[str, Any]:
     ).to(device)
     return {"model": model, "tokenizer": tokenizer}
 
+def _parse_qwen_sql_output(text: str) -> str:
+    """Extract SQL from Qwen model output - return text after prompt."""
+    # Qwen models may repeat the prompt; find where generation starts
+    sql_keywords = ["SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "WITH"]
+    upper_text = text.upper()
+    for kw in sql_keywords:
+        idx = upper_text.find(kw)
+        if idx != -1:
+            return text[idx:].strip()
+    return text.strip()
+
+def _init_qwen_sql(model_path: str, device: str) -> Dict[str, Any]:
+    """Custom initialization for Qwen Text-to-SQL models (supports standard & GGUF)."""
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path, local_files_only=True, trust_remote_code=True
+    )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    dtype = torch.float16 if device == "cuda" else torch.float32
+    # Modern transformers automatically handles GGUF format if detected
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        local_files_only=True,
+        torch_dtype=dtype,
+        low_cpu_mem_usage=True,
+        trust_remote_code=True
+    ).to(device)
+    return {"model": model, "tokenizer": tokenizer}
+
 # Registry mapping identifier strings to their handlers
 CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "pip-sql-1.3b": {
@@ -59,13 +88,18 @@ CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "parse_fn": _parse_pip_sql_output,
         "default_max_tokens": 200
     },
-    # Example: Add future models here easily
-    # "sqlcoder-7b": {
-    #     "description": "Defog/sqlcoder for SQL generation",
-    #     "init_fn": _init_default_causal,
-    #     "parse_fn": lambda t: t.split("```sql")[-1].split("```")[0].strip() if "```sql" in t else t.strip(),
-    #     "default_max_tokens": 512
-    # }
+    "Qwen-3-4b-Text_to_SQL-GGUF": {
+        "description": "Qwen-3 Text-to-SQL model (GGUF or standard)",
+        "init_fn": _init_qwen_sql,
+        "parse_fn": _parse_qwen_sql_output,
+        "default_max_tokens": 512
+    },
+    "Qwen-2.5-3b-Text_to_SQL": {
+        "description": "Qwen-2.5 Text-to-SQL model",
+        "init_fn": _init_qwen_sql,
+        "parse_fn": _parse_qwen_sql_output,
+        "default_max_tokens": 512
+    },
 }
 # =============================================================================
 
@@ -88,7 +122,7 @@ class TextToTextModel:
         name_lower = self.model_name.lower()
         path_str = str(self.model_path).lower()
         for key, config in CUSTOM_MODEL_REGISTRY.items():
-            if key in name_lower or key in path_str:
+            if key.lower() in name_lower or key.lower() in path_str:
                 self._custom_config = config
                 return
 

@@ -3,7 +3,7 @@ import time
 from TextToText.TextToTextModelFactory import TextToTextModelFactory
 
 def TextToText_main():
-    root_folder = r"D:\AIs\text-to-sql"
+    root_folder = r"D:\AIs\Any-to-Any"
     manager = TextToTextModelFactory(root_folder)
     print("📦 Available models:")
     models = manager.list_available_models()

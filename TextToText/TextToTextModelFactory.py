@@ -6,6 +6,7 @@ from typing import Dict, Optional, List, Any
 from dataclasses import dataclass, asdict
 from TextToText.TextToTextModel import TextToTextModel
 
+
 @dataclass
 class TextToTextModelErrorLog:
     model_name: str
@@ -20,6 +21,7 @@ class TextToTextModelErrorLog:
     def from_dict(cls, data: dict):
         return cls(**data)
 
+
 @dataclass
 class TextToTextModelInfo:
     name: str
@@ -32,11 +34,13 @@ class TextToTextModelInfo:
     def to_dict(self) -> dict:
         return asdict(self)
 
+
 GLOBAL_CONFIG = {
-    "max_errors_threshold": 10,
+    "max_errors_threshold": 20,
     "config_filename": "text2text_config.json",
     "stats_filename": "text2text_stats.json"
 }
+
 
 class TextToTextModelFactory:
     def __init__(self, root_folder: str):
@@ -79,30 +83,33 @@ class TextToTextModelFactory:
         return self.get_error_count(model_name) > GLOBAL_CONFIG["max_errors_threshold"]
 
     def create(self, model_name: str) -> Optional['TextToTextModel']:
-        print(f"🔍 Создание модели: {model_name}")
-        print(f"   Количество ошибок: {self.get_error_count(model_name)}/{GLOBAL_CONFIG['max_errors_threshold']}")
-        print(f"   Исправна: {not self.is_model_faulty(model_name)}")
+        print(f"🔍 Creating model: {model_name}")
+        print(f"   Error count: {self.get_error_count(model_name)}/{GLOBAL_CONFIG['max_errors_threshold']}")
+        print(f"   Is functional: {not self.is_model_faulty(model_name)}")
         if self.is_model_faulty(model_name):
-            print(f"⊘ Пропуск неисправной модели: {model_name}")
+            print(f"⊘ Skipping faulty model: {model_name}")
             return None
+
         model_folder = self._find_model_folder(model_name)
         if not model_folder:
-            error_msg = f"Папка модели не найдена: {model_name}"
+            error_msg = f"Model folder not found: {model_name}"
             print(f"❌ {error_msg}")
             self._log_error(model_name, error_msg)
             return None
+
         if not self._verify_model_files(model_folder):
-            error_msg = "Проверка файлов модели завершена неудачей"
-            print(f"❌ {error_msg} - Путь: {model_folder}")
+            error_msg = "Model files verification failed"
+            print(f"❌ {error_msg} - Path: {model_folder}")
             self._log_error(model_name, error_msg)
             return None
+
         try:
-            print(f"   Попытка инициализации TextToTextModel...")
+            print(f"   Attempting to initialize TextToTextModel...")
             model = TextToTextModel(model_path=model_folder, model_name=model_name)
-            print(f"   ✓ Модель успешно инициализирована")
+            print(f"   ✓ Model initialized successfully")
             return model
         except Exception as e:
-            error_msg = f"Ошибка инициализации: {str(e)}"
+            error_msg = f"Initialization error: {str(e)}"
             print(f"❌ {error_msg}")
             traceback.print_exc()
             self._log_error(model_name, error_msg)
@@ -110,32 +117,34 @@ class TextToTextModelFactory:
 
     def _find_model_folder(self, model_name: str) -> Optional[Path]:
         folder_name = model_name.replace('/', '_')
-        print(f"   Поиск папки: {folder_name}")
+        print(f"   Searching for folder: {folder_name}")
         for item in self.root_folder.iterdir():
             if item.is_dir() and item.name == folder_name:
                 if (item / "model_info.json").exists() or (item / "config.json").exists():
-                    print(f"   ✓ Найдено: {item}")
+                    print(f"   ✓ Found: {item}")
                     return item
-        print(f"   ✗ Не найдено в {self.root_folder}")
+        print(f"   ✗ Not found in {self.root_folder}")
         return None
 
     def _verify_model_files(self, folder: Path) -> bool:
         files = [f.name.lower() for f in folder.rglob('*') if f.is_file()]
-        # Пропускаем модели в формате GGUF (требуют llama.cpp, не совместимы с PyTorch)
+
+        # Modern transformers supports GGUF natively, so we allow it
         if any(f.endswith('.gguf') for f in files):
-            print(f"   ⚠ Пропуск модели GGUF (требует llama.cpp, не PyTorch)")
-            return False
-        # Пропускаем модели только в формате ONNX
+            print(f"   ⚠ Detected GGUF model (transformers will handle loading)")
+
+        # Skip ONNX-only models
         if any(f.endswith('.onnx') for f in files) and not any(
-            f.endswith(('.safetensors', '.bin', '.pt', '.pth')) or 'pytorch_model' in f for f in files
+                f.endswith(('.safetensors', '.bin', '.pt', '.pth')) or 'pytorch_model' in f for f in files
         ):
-            print(f"   ⚠ Пропуск модели ONNX (не совместима с PyTorch)")
+            print(f"   ⚠ Skipping ONNX-only model (not compatible with PyTorch)")
             return False
+
         has_config = any('config.json' in f for f in files)
         has_weights = any(
-            f.endswith(('.safetensors', '.bin', '.pt', '.pth')) or 'pytorch_model' in f for f in files
+            f.endswith(('.safetensors', '.bin', '.pt', '.pth', '.gguf')) or 'pytorch_model' in f for f in files
         )
-        print(f"   Конфиг найден: {has_config}, Веса найдены: {has_weights}")
+        print(f"   Config found: {has_config}, Weights found: {has_weights}")
         return has_config and has_weights
 
     def list_available_models(self) -> List[TextToTextModelInfo]:
@@ -181,7 +190,7 @@ class TextToTextModelFactory:
                 with open(self.stats_path, 'r', encoding='utf-8') as f:
                     existing = json.load(f)
             except Exception as e:
-                print(f"⚠ Предупреждение: Ошибка чтения {self.stats_path}: {e}")
+                print(f"⚠ Warning: Failed to read stats file {self.stats_path}: {e}")
                 existing = {}
         if 'processing_history' not in existing:
             existing['processing_history'] = []
@@ -192,4 +201,4 @@ class TextToTextModelFactory:
             with open(self.stats_path, 'w', encoding='utf-8') as f:
                 json.dump(existing, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"❌ Ошибка сохранения статистики в {self.stats_path}: {e}")
+            print(f"❌ Error saving statistics to {self.stats_path}: {e}")
