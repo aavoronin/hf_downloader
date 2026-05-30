@@ -336,7 +336,7 @@ def _parse_qwen25_coder_output(text: str, original_prompt: str = "") -> str:
             if len(parts) > 1:
                 response = parts[1].strip()
                 # Remove trailing im_end token if present
-                if "<|im_end|>" in response:
+                if "<|im_end|> " in response:
                     response = response.split("<|im_end|>")[0].strip()
                 return response
     # Fallback: return text as-is, stripped
@@ -627,7 +627,7 @@ class TextToTextModel:
                         max_length=prompt_len + adjusted_max
                     ).to(self._device)
                     # Generate with proper settings for Qwen2.5
-                    # Explicitly set temperature/top_p/top_k to avoid warnings when do_sample=False
+                    # Explicitly unset sampling parameters to avoid transformers warnings
                     with torch.no_grad():
                         generated_ids = model.generate(
                             **inputs,
@@ -635,9 +635,9 @@ class TextToTextModel:
                             do_sample=False,
                             pad_token_id=tokenizer.pad_token_id,
                             eos_token_id=tokenizer.eos_token_id,
-                            temperature=1.0,
-                            top_p=1.0,
-                            top_k=0
+                            top_k=None,
+                            top_p=None,
+                            temperature=None
                         )
                     # Extract only the newly generated tokens (Qwen pattern)
                     input_len = inputs.input_ids.shape[1]
@@ -680,27 +680,27 @@ class TextToTextModel:
                 # Calculate token budget for standard custom models
                 adjusted_max, _ = self._calculate_available_tokens(prompt, max_new_tokens)
                 inputs = tokenizer(prompt, return_tensors="pt").to(self._device)
-                # Explicitly set temperature/top_p/top_k to avoid warnings when do_sample=False
+                # Explicitly unset sampling parameters to avoid transformers warnings
                 outputs = model.generate(
                     **inputs,
                     max_new_tokens=adjusted_max,
                     do_sample=False,
-                    temperature=1.0,
-                    top_p=1.0,
-                    top_k=0
+                    top_k=None,
+                    top_p=None,
+                    temperature=None
                 )
                 generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
                 return self._custom_config["parse_fn"](generated_text)
 
             # Standard pipeline processing
-            # Explicitly set temperature/top_p/top_k to avoid warnings when do_sample=False
+            # Explicitly unset sampling parameters to avoid transformers warnings
             outputs = self._pipeline(
                 prompt,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
-                temperature=1.0,
-                top_p=1.0,
-                top_k=0
+                top_k=None,
+                top_p=None,
+                temperature=None
             )
             if isinstance(outputs, list):
                 return outputs[0].get("generated_text", "").strip()

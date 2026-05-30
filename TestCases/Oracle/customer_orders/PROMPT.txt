@@ -8,6 +8,7 @@ Do not transfer COMMIT statements to Greenplum if hey are not needed.
 Use ZLIB(5) compression in Greenplum.
 Unless specifically instructed use "distributed randomly" on create tables.
 All identifiers should be converted per ORACLE_TO_GREENPLUM_NAMING_CONVENTION below. Nothing added, changed or shorten unless indicated by coding convention.
+Text of comments and strings is not modified.
 
 Original prompt or any parts of it should not be included.
 Use the following guidelines.
