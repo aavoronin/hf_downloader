@@ -3,14 +3,12 @@ from pathlib import Path
 from typing import Union, Dict, Any, Callable, List, Optional
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, AutoConfig
-
 # Optional import for prem-research/premsql library
 try:
     from premsql.agents import BaseLineAgent
     from premsql.generators import Text2SQLGeneratorHF
     from premsql.agents.tools import SimpleMatplotlibTool
     from premsql.executors import SQLiteExecutor
-
     PREMSQL_AVAILABLE = True
 except ImportError:
     PREMSQL_AVAILABLE = False
@@ -22,12 +20,10 @@ except ImportError:
 # Try to import llama_cpp for GGUF support
 try:
     from llama_cpp import Llama
-
     LLAMA_CPP_AVAILABLE = True
 except ImportError:
     Llama = None
     LLAMA_CPP_AVAILABLE = False
-
 
 # =============================================================================
 # CUSTOM MODEL REGISTRY
@@ -53,13 +49,11 @@ def _init_default_causal(model_path: str, device: str) -> Dict[str, Any]:
     ).to(device)
     return {"model": model, "tokenizer": tokenizer}
 
-
 def _parse_pip_sql_output(text: str) -> str:
     """Extract SQL content between <sql> and </sql> tags."""
     if "<sql>" in text and "</sql>" in text:
         return text.split('<sql>')[1].split('</sql>')[0].strip()
     return text.strip()
-
 
 def _init_pip_sql(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for pip-sql models."""
@@ -78,7 +72,6 @@ def _init_pip_sql(model_path: str, device: str) -> Dict[str, Any]:
     ).to(device)
     return {"model": model, "tokenizer": tokenizer}
 
-
 def _parse_qwen_sql_output(text: str) -> str:
     """Extract SQL from Qwen model output - return text after prompt."""
     sql_keywords = ["SELECT", "INSERT", "UPDATE", "DELETE", "CREATE",
@@ -89,7 +82,6 @@ def _parse_qwen_sql_output(text: str) -> str:
         if idx != -1:
             return text[idx:].strip()
     return text.strip()
-
 
 def _init_qwen_sql(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for Qwen Text-to-SQL models (standard PyTorch)."""
@@ -107,7 +99,6 @@ def _init_qwen_sql(model_path: str, device: str) -> Dict[str, Any]:
         trust_remote_code=True
     ).to(device)
     return {"model": model, "tokenizer": tokenizer}
-
 
 def _init_qwen_gguf(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for Qwen GGUF models using llama-cpp-python."""
@@ -132,11 +123,9 @@ def _init_qwen_gguf(model_path: str, device: str) -> Dict[str, Any]:
     )
     return {"llm": llm, "is_gguf": True}
 
-
 def _parse_gguf_output(text: str) -> str:
     """Parse GGUF model output - return stripped text."""
     return text.strip()
-
 
 def _init_prem_sql(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for prem-research/prem-1B-SQL using premsql."""
@@ -168,14 +157,12 @@ def _init_prem_sql(model_path: str, device: str) -> Dict[str, Any]:
     )
     return {"agent": agent, "is_prem": True}
 
-
 def _parse_prem_sql_output(text: str) -> str:
     """Parse prem-sql output - agent returns dataframe, extract SQL if present."""
     # prem agent may return dataframe or dict; try to extract SQL string
     if hasattr(text, 'show_dataframe'):
         return str(text)
     return str(text).strip()
-
 
 def _parse_antelope_output(text: str) -> str:
     """Parse Antelope model output - extract SQL after ### SQL: prefix."""
@@ -184,7 +171,6 @@ def _parse_antelope_output(text: str) -> str:
         sql_part = text.split("### SQL:")[-1].strip()
         return sql_part.split('\n')[0].strip()
     return text.strip()
-
 
 def _init_antelope_sql(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for AuricErgeson/Antelope-textTosql."""
@@ -206,7 +192,6 @@ def _init_antelope_sql(model_path: str, device: str) -> Dict[str, Any]:
         model = model.to(device)
     return {"model": model, "tokenizer": tokenizer}
 
-
 def _parse_gemma_sql_output(text: str) -> str:
     """Parse Gemma-style SQL output - extract model answer after turn tags."""
     # Split on end_of_turn and take first two parts
@@ -217,7 +202,6 @@ def _parse_gemma_sql_output(text: str) -> str:
         model_answer = ans.split("model")[1].strip()
         return model_answer
     return text.strip()
-
 
 def _init_gemma_sql(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for suriya7/Gemma2B-Finetuned-Sql-Generator."""
@@ -235,7 +219,6 @@ def _init_gemma_sql(model_path: str, device: str) -> Dict[str, Any]:
         trust_remote_code=True
     ).to(device)
     return {"model": model, "tokenizer": tokenizer}
-
 
 def _init_gemma_gguf(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for Gemma GGUF models using llama-cpp-python."""
@@ -260,7 +243,6 @@ def _init_gemma_gguf(model_path: str, device: str) -> Dict[str, Any]:
     )
     return {"llm": llm, "is_gguf": True}
 
-
 def _init_bagel_gguf(model_path: str, device: str) -> Dict[str, Any]:
     """Custom initialization for calcuis/bagel-gguf using llama-cpp-python."""
     if not LLAMA_CPP_AVAILABLE:
@@ -284,27 +266,22 @@ def _init_bagel_gguf(model_path: str, device: str) -> Dict[str, Any]:
     )
     return {"llm": llm, "is_gguf": True}
 
-
 # =============================================================================
 # QWEN2.5-CODER CUSTOM HANDLERS
 # =============================================================================
-
 def _init_qwen25_coder(model_path: str, device: str,
                        context_length: int = 32768) -> Dict[str, Any]:
     """
     Custom initialization for Qwen2.5-Coder models.
     Handles chat template formatting and proper token management.
-
     Args:
         model_path: Path to model files
         device: Target device ('cuda' or 'cpu')
         context_length: Max context length (32768 for small models, 131072 for 7B/14B)
-
     Returns:
         Dict with model, tokenizer, and config
     """
     print(f"   [Qwen2.5-Coder] Loading with context_length={context_length}...")
-
     # Load tokenizer with chat template support
     tokenizer = AutoTokenizer.from_pretrained(
         model_path,
@@ -312,14 +289,11 @@ def _init_qwen25_coder(model_path: str, device: str,
         trust_remote_code=True,
         model_max_length=context_length
     )
-
     # Ensure pad token is set
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
     # Determine dtype based on device
     dtype = torch.float16 if device == "cuda" else torch.float32
-
     # Load model with appropriate settings for Qwen2.5 architecture
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
@@ -331,7 +305,6 @@ def _init_qwen25_coder(model_path: str, device: str,
         rope_scaling={"factor": 4.0, "original_max_position_embeddings": 32768, "type": "yarn"}
         if context_length > 32768 else None
     ).to(device)
-
     return {
         "model": model,
         "tokenizer": tokenizer,
@@ -339,16 +312,13 @@ def _init_qwen25_coder(model_path: str, device: str,
         "is_qwen25_coder": True
     }
 
-
 def _parse_qwen25_coder_output(text: str, original_prompt: str = "") -> str:
     """
     Parse Qwen2.5-Coder model output.
     Extracts only the assistant's response from the chat-formatted output.
-
     Args:
         text: Full generated text from model
         original_prompt: Original user prompt for reference
-
     Returns:
         Cleaned response text
     """
@@ -356,10 +326,8 @@ def _parse_qwen25_coder_output(text: str, original_prompt: str = "") -> str:
     # - System message prefix
     # - User message prefix
     # - Assistant response (what we want)
-
     # Common Qwen chat markers
     assistant_markers = ["<|im_start|>assistant", "assistant\n", "Assistant:"]
-
     # Try to find assistant response start
     for marker in assistant_markers:
         if marker in text:
@@ -371,32 +339,26 @@ def _parse_qwen25_coder_output(text: str, original_prompt: str = "") -> str:
                 if "<|im_end|>" in response:
                     response = response.split("<|im_end|>")[0].strip()
                 return response
-
     # Fallback: return text as-is, stripped
     return text.strip()
-
 
 def _process_qwen25_coder_prompt(prompt: str, tokenizer,
                                  system_message: Optional[str] = None) -> str:
     """
     Format prompt using Qwen2.5-Coder chat template.
-
     Args:
         prompt: User's instruction/prompt
         tokenizer: Qwen tokenizer with apply_chat_template support
         system_message: Optional system message (default: Qwen standard)
-
     Returns:
         Formatted text ready for tokenization
     """
     if system_message is None:
         system_message = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."
-
     messages = [
         {"role": "system", "content": system_message},
         {"role": "user", "content": prompt}
     ]
-
     # Apply chat template with generation prompt marker
     formatted = tokenizer.apply_chat_template(
         messages,
@@ -404,7 +366,6 @@ def _process_qwen25_coder_prompt(prompt: str, tokenizer,
         add_generation_prompt=True
     )
     return formatted
-
 
 # =============================================================================
 # Registry mapping identifier strings to their handlers
@@ -523,7 +484,6 @@ CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
 }
 
-
 # =============================================================================
 class TextToTextModel:
     def __init__(self, model_path: Path, model_name: str):
@@ -577,23 +537,27 @@ class TextToTextModel:
             unsupported = ['vision', 'image', 'diffusion', 'llada', 'lumina']
             if any(u in arch for u in unsupported):
                 raise ValueError(f"Architecture '{arch}' unsupported for text-generation")
+
             tokenizer = AutoTokenizer.from_pretrained(
                 str(self.model_path), local_files_only=True, trust_remote_code=True
             )
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
+
             model_dtype = torch.float16 if self._device == "cuda" else torch.float32
             model = AutoModelForCausalLM.from_pretrained(
                 str(self.model_path), local_files_only=True,
                 torch_dtype=model_dtype, low_cpu_mem_usage=True,
                 trust_remote_code=True
             ).to(self._device)
+
             device_arg = 0 if self._device == "cuda" else -1
             self._pipeline = pipeline(
                 "text-generation", model=model, tokenizer=tokenizer,
                 device=device_arg
             )
             print("   [Pipeline] ✓ Pipeline ready")
+
         except ImportError as e:
             if "cannot import name" in str(e) or "initialization" in str(e):
                 print(f"   ⚠ Transformers compatibility error: {e}")
@@ -613,43 +577,35 @@ class TextToTextModel:
     def _calculate_available_tokens(self, prompt: str, max_new_tokens: int) -> tuple:
         """
         Calculate token budget respecting model context limits.
-
         Returns:
             tuple: (adjusted_max_new_tokens, prompt_tokens_count)
         """
         if not self._custom_config or not self._custom_objects:
             return max_new_tokens, 0
-
         tokenizer = self._custom_objects.get("tokenizer")
         if not tokenizer:
             return max_new_tokens, 0
 
         context_length = self._custom_config.get("max_input_tokens", 32768)
-
         # Count prompt tokens
         prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
         prompt_token_count = len(prompt_tokens)
-
         # Reserve space for response
         reserved = self._custom_config.get("default_max_tokens", max_new_tokens)
         available = context_length - prompt_token_count - 100  # safety margin
-
         # Use minimum of requested, reserved, or available
         adjusted_max = min(max_new_tokens, reserved, max(available, 256))
-
         return adjusted_max, prompt_token_count
 
     def process(self, prompt: str, max_new_tokens: int = 1024 * 4) -> str:
         print("   [Process] Processing request...")
         self._load_pipeline()
-
         try:
             if self._custom_config:
                 # Handle Qwen2.5-Coder models with chat template
                 if self._custom_config.get("is_qwen25_coder"):
                     tokenizer = self._custom_objects["tokenizer"]
                     model = self._custom_objects["model"]
-
                     # Format prompt with chat template
                     system_msg = self._custom_config.get(
                         "system_message",
@@ -658,13 +614,11 @@ class TextToTextModel:
                     formatted_prompt = _process_qwen25_coder_prompt(
                         prompt, tokenizer, system_msg
                     )
-
                     # Calculate token budget
                     adjusted_max, prompt_len = self._calculate_available_tokens(
                         formatted_prompt, max_new_tokens
                     )
                     print(f"   [Process] Prompt tokens: {prompt_len}, Max new: {adjusted_max}")
-
                     # Tokenize and move to device
                     inputs = tokenizer(
                         formatted_prompt,
@@ -672,26 +626,26 @@ class TextToTextModel:
                         truncation=True,
                         max_length=prompt_len + adjusted_max
                     ).to(self._device)
-
                     # Generate with proper settings for Qwen2.5
+                    # Explicitly set temperature/top_p/top_k to avoid warnings when do_sample=False
                     with torch.no_grad():
                         generated_ids = model.generate(
                             **inputs,
                             max_new_tokens=adjusted_max,
                             do_sample=False,
                             pad_token_id=tokenizer.pad_token_id,
-                            eos_token_id=tokenizer.eos_token_id
+                            eos_token_id=tokenizer.eos_token_id,
+                            temperature=1.0,
+                            top_p=1.0,
+                            top_k=0
                         )
-
                     # Extract only the newly generated tokens (Qwen pattern)
                     input_len = inputs.input_ids.shape[1]
                     generated_ids = generated_ids[:, input_len:]
-
                     # Decode and parse
                     raw_text = tokenizer.batch_decode(
                         generated_ids, skip_special_tokens=True
                     )[0]
-
                     return _parse_qwen25_coder_output(raw_text, prompt)
 
                 # Handle prem-sql models via premsql agent
@@ -723,27 +677,36 @@ class TextToTextModel:
                 # Handle standard custom models
                 tokenizer = self._custom_objects["tokenizer"]
                 model = self._custom_objects["model"]
-
                 # Calculate token budget for standard custom models
                 adjusted_max, _ = self._calculate_available_tokens(prompt, max_new_tokens)
-
                 inputs = tokenizer(prompt, return_tensors="pt").to(self._device)
+                # Explicitly set temperature/top_p/top_k to avoid warnings when do_sample=False
                 outputs = model.generate(
                     **inputs,
                     max_new_tokens=adjusted_max,
-                    do_sample=False
+                    do_sample=False,
+                    temperature=1.0,
+                    top_p=1.0,
+                    top_k=0
                 )
                 generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
                 return self._custom_config["parse_fn"](generated_text)
 
             # Standard pipeline processing
-            outputs = self._pipeline(prompt, max_new_tokens=max_new_tokens, do_sample=False)
+            # Explicitly set temperature/top_p/top_k to avoid warnings when do_sample=False
+            outputs = self._pipeline(
+                prompt,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                temperature=1.0,
+                top_p=1.0,
+                top_k=0
+            )
             if isinstance(outputs, list):
                 return outputs[0].get("generated_text", "").strip()
             elif isinstance(outputs, dict):
                 return outputs.get("generated_text", "").strip()
             return str(outputs).strip()
-
         except Exception as e:
             print(f"   [Process] ❌ Processing failed: {str(e)}")
             traceback.print_exc()

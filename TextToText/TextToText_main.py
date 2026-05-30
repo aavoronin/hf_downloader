@@ -26,8 +26,10 @@ def TextToText_main():
 
     # test_prompts = OracleConverterHelper.get_test_prompts()
 
-    #testCasesLoader = TestCasesLoaded(r"TestCases\Oracle\Basic")
-    testCasesLoader = TestCasesLoaded(r"TestCases/Oracle/customer_orders")
+    testCasesLoader = TestCasesLoaded(r"TestCases\Oracle\Basic")
+    #testCasesLoader = TestCasesLoaded(r"TestCases/Oracle/customer_orders")
+    #testCasesLoader = TestCasesLoaded(r"TestCases/Oracle/human_resources")
+
     test_prompts = testCasesLoader.get_test_prompts()
 
 
