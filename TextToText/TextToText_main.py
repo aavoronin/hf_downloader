@@ -24,20 +24,22 @@ def TextToText_main():
     for i, model in enumerate(models, 1):
         print(f"{i}. {model.name} - {model.size_human}")
 
-    # test_prompts = OracleConverterHelper.get_test_prompts()
-
-    testCasesLoader = TestCasesLoaded(r"TestCases\Oracle\Basic")
-    #testCasesLoader = TestCasesLoaded(r"TestCases/Oracle/customer_orders")
-    #testCasesLoader = TestCasesLoaded(r"TestCases/Oracle/human_resources")
-
-    test_prompts = testCasesLoader.get_test_prompts()
-
-
     if not models:
         print("❌ No models found. Check the path.")
         return
 
-    apply_models_to_test_cases(manager, models, test_prompts)
+    # test_prompts = OracleConverterHelper.get_test_prompts()
+
+    for test_case_folder in [r"TestCases/Oracle/Basic",
+                             #r"TestCases/Oracle/customer_orders",
+                             r"TestCases/Oracle/human_resources"]:
+        test_cases_loader = TestCasesLoaded(test_case_folder)
+        test_prompts = test_cases_loader.get_test_prompts()
+        apply_models_to_test_cases(manager, models, test_prompts)
+
+        #test_cases_loader = TestCasesLoaded(r"TestCases\Oracle\Basic")
+        #test_cases_loader = TestCasesLoaded(r"TestCases/Oracle/customer_orders")
+        #test_cases_loader = TestCasesLoaded(r"TestCases/Oracle/human_resources")
 
 
 def apply_models_to_test_cases(manager: TextToTextModelFactory, models: list[TextToTextModelInfo], test_prompts: list):
