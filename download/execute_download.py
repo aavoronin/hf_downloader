@@ -23,6 +23,35 @@ def execute_download():
         lister.fetch_all_pages()
         lister.show_results()
     """
+    start_urls = [
+        #"https://huggingface.co/models?pipeline_tag=any-to-any&sort=downloads",
+        #"https://huggingface.co/models?pipeline_tag=any-to-any&num_parameters=min:6B,max:9B&sort=downloads",
+        #"https://huggingface.co/models?pipeline_tag=any-to-any&num_parameters=min:6B,max:9B&sort=likes",
+        #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-7B-Instruct",
+        #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-14B-Instruct",
+        "https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-1.5B-Instruct",
+        "https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-3B-Instruct",
+        "https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-0.5B-Instruct",
+
+    ]
+    root_folder = r"D:\AIs\Any-to-Any"
+    HFModelLister.MAX_PAGES = 1
+    for start_url in start_urls:
+        for _ in range(5):
+            download_certain_type_of_models(root_folder,
+                start_urls=[start_url], first_only = True)
+    return
+
+    start_urls = [
+        "https://huggingface.co/models?pipeline_tag=image-text-to-text&num_parameters=min:6B,max:24B&sort=trending"
+    ]
+    root_folder = r"D:\AIs\Image-Text-to-Text"
+    HFModelLister.MAX_PAGES = 1
+    for _ in range(5):
+        download_certain_type_of_models(root_folder, start_urls)
+    return
+
+
 
     start_urls = [
         #"https://huggingface.co/models?pipeline_tag=text-generation&num_parameters=min:0,max:6B&sort=likes&search=sql",
@@ -38,11 +67,6 @@ def execute_download():
     download_certain_type_of_models(root_folder, start_urls)
     return
 
-    start_urls = ["https://huggingface.co/models?pipeline_tag=any-to-any&sort=downloads"]
-    root_folder = r"D:\AIs\Any-to-Any"
-    HFModelLister.MAX_PAGES = 4
-    download_certain_type_of_models(root_folder, start_urls)
-    return
 
     start_urls = [
         # "https://huggingface.co/models?pipeline_tag=image-to-text&library=pytorch&sort=trending&search=ocr",
@@ -81,13 +105,16 @@ def execute_download():
     download_certain_type_of_models(root_folder, start_urls, exclude)
 
 
-def download_certain_type_of_models(root_folder: str, start_urls: list[str], exclude: List[str] = []):
+def download_certain_type_of_models(root_folder: str,
+                                    start_urls: list[str],
+                                    exclude: List[str] = [],
+                                    first_only=False):
     downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder,
                                           exclude = exclude)
     downloader.process_urls()
     downloader.show_results()
     downloader.print_local_models()
-    downloader.download_models()
+    downloader.download_models(first_only)
     downloader.print_download_summary()
     downloader.print_folder_structure()
 

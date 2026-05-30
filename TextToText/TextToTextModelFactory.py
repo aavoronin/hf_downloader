@@ -149,6 +149,10 @@ class TextToTextModelFactory:
             config_file = item / "config.json"
             if not model_info_file.exists() and not config_file.exists():
                 continue
+            with open(model_info_file, "r", encoding="utf-8") as f:
+                model_info = json.load(f)
+            if not "download_date" in model_info:
+                continue
             total_size = self._calculate_folder_size(item)
             model_name = item.name.replace('_', '/', 1) if '_' in item.name else item.name
             files = [str(f.relative_to(item)) for f in item.rglob('*') if f.is_file()]

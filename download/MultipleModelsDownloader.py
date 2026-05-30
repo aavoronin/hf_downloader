@@ -61,8 +61,16 @@ class MultipleModelsDownloader:
         model_folder.mkdir(parents=True, exist_ok=True)
 
         if json_path.exists():
-            print(f"⊘ Skipped (exists): {model_id}")
-            return
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    model_info = json.load(f)
+                # Check if any of the stats fields are missing
+                if all(key in model_info for key in ["size", "size_str", "numfiles"]):
+                    print(f"⊘ Skipped (exists): {model_id}")
+                    return
+                print(f"Incomplete: {model_id}. Resuming download.")
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"✗ Error loading {json_path}: {e}")
 
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(model_info, f, indent=2, ensure_ascii=False)
@@ -246,7 +254,7 @@ class MultipleModelsDownloader:
         if self.lister is not None:
             self.lister.show_results()
 
-    def download_models(self):
+    def download_models(self, first_only=False):
         """Download all local models that haven't been downloaded yet."""
         print(f"\n{'=' * 60}")
         print(f"Downloading models from: {self.root_folder}")
@@ -263,7 +271,16 @@ class MultipleModelsDownloader:
             return
 
         # 2nd loop: load each model using HFModelDownloader
-        for model_info in local_models:
+        for current_model_info in self.lister.results:
+            #for model_info in local_models:
+            model_ids = [local_model_id.get("Model ID", "") for local_model_id in local_models]
+            model_ids = [m for m in model_ids if m and m==current_model_info['Model ID']]
+            if not model_ids or len(model_ids) == 0:
+                continue
+
+            model_infos = [model_info for model_info in local_models
+                           if model_info.get("Model ID", "") == current_model_info['Model ID']]
+            model_info = model_infos[0]
             model_id = model_info.get("Model ID", "")
             if not model_id:
                 continue
@@ -282,7 +299,8 @@ class MultipleModelsDownloader:
             if not self._needs_download(model_info):
                 print(f"✓ {model_id} already downloaded - skipping")
                 # Update folder stats for previously downloaded models
-                self._update_model_info_with_folder_stats(model_id)
+                if first_only:
+                    break
                 continue
 
             # Build target directory path
@@ -310,6 +328,9 @@ class MultipleModelsDownloader:
                 print(f"{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')} ✗ Failed to download {model_id}")
                 # Increment failed attempts in config
                 self._increment_failed_attempts(model_id)
+
+            if first_only:
+                break
 
     def list_local_models(self) -> List[Dict]:
         """
