@@ -6,8 +6,8 @@ ALLOWED_MODELS = [
     "Qwen/Qwen2.5-Coder-0.5B-Instruct",
     "Qwen/Qwen2.5-Coder-1.5B-Instruct",
     "Qwen/Qwen2.5-Coder-3B-Instruct",
-    #"Qwen/Qwen2.5-Coder-7B-Instruct",
-    #"Qwen/Qwen2.5-Coder-14B-Instruct",
+    "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "Qwen/Qwen2.5-Coder-14B-Instruct",
     #"PipableAI/pip-sql-1.3b",
     #"prem-research/prem-1B-SQL",
     #"PipableAI/pip-sql-1.3b",
@@ -24,7 +24,7 @@ def TextToText_main():
     instruction = """
 You are a Data Engineer who converts SQL from Oracle to Arenadata Greenplum version 6.30.
 You are given SQL query or SQL script in oracle you should produce equivalent script in Arenadata Greenplum version 6.30.
-Your output should contain the converted query or sql script only.
+Your output should contain the converted query or sql script only with no wrapping just pure code itself.
 Comments comments should ber included if they have been in the original query.
 No explanations or statements on what you have done or how you have done it should be included.
 No recommendations or proposals should be included. 
