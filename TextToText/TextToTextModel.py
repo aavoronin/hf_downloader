@@ -310,58 +310,58 @@ CUSTOM_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "PipableAI/pip-sql for SQL generation with tag-based parsing",
         "init_fn": _init_pip_sql,
         "parse_fn": _parse_pip_sql_output,
-        "default_max_tokens": 200
+        "default_max_tokens": 1024 * 4
     },
     "pip-sql-1.3b-GGUF": {
         "description": "QuantFactory/pip-sql-1.3b-GGUF with tag-based parsing",
         "init_fn": _init_pip_sql,
         "parse_fn": _parse_pip_sql_output,
-        "default_max_tokens": 200
+        "default_max_tokens": 1024 * 4
     },
     "prem-1B-SQL": {
         "description": "prem-research/prem-1B-SQL using premsql agent framework",
         "init_fn": _init_prem_sql,
         "parse_fn": _parse_prem_sql_output,
-        "default_max_tokens": 512,
+        "default_max_tokens": 1024 * 4,
         "use_prem": True
     },
     "Qwen-3-4b-Text_to_SQL-GGUF": {
         "description": "Qwen-3 Text-to-SQL model (GGUF format, uses llama-cpp-python)",
         "init_fn": _init_qwen_gguf,
         "parse_fn": _parse_gguf_output,
-        "default_max_tokens": 256,
+        "default_max_tokens": 1024 * 4,
         "use_gguf": True
     },
     "Qwen-2.5-3b-Text_to_SQL": {
         "description": "Qwen-2.5 Text-to-SQL model",
         "init_fn": _init_qwen_sql,
         "parse_fn": _parse_qwen_sql_output,
-        "default_max_tokens": 512
+        "default_max_tokens": 1024 * 4
     },
     "Antelope-textTosql": {
         "description": "AuricErgeson/Antelope-textTosql with custom prompt format",
         "init_fn": _init_antelope_sql,
         "parse_fn": _parse_antelope_output,
-        "default_max_tokens": 128
+        "default_max_tokens": 1024 * 4
     },
     "Gemma2B-Finetuned-Sql-Generator": {
         "description": "suriya7/Gemma2B-Finetuned-Sql-Generator with Gemma chat template",
         "init_fn": _init_gemma_sql,
         "parse_fn": _parse_gemma_sql_output,
-        "default_max_tokens": 1000
+        "default_max_tokens": 1024 * 4
     },
     "Gemma2B-Finetuned-Sql-Generator-GGUF": {
         "description": "Gemma2B-Finetuned-Sql-Generator (GGUF format, uses llama-cpp-python)",
         "init_fn": _init_gemma_gguf,
         "parse_fn": _parse_gemma_sql_output,
-        "default_max_tokens": 1000,
+        "default_max_tokens": 1024 * 4,
         "use_gguf": True
     },
     "bagel-gguf": {
         "description": "calcuis/bagel-gguf model (GGUF format, uses llama-cpp-python)",
         "init_fn": _init_bagel_gguf,
         "parse_fn": _parse_gguf_output,
-        "default_max_tokens": 512,
+        "default_max_tokens": 1024 * 4,
         "use_gguf": True
     },
 }
@@ -455,7 +455,7 @@ class TextToTextModel:
             traceback.print_exc()
             raise RuntimeError(f"Failed to load model {self.model_name}: {str(e)}")
 
-    def process(self, prompt: str, max_new_tokens: int = 512) -> str:
+    def process(self, prompt: str, max_new_tokens: int = 1024 * 4) -> str:
         print("   [Process] Processing request...")
         self._load_pipeline()
         try:
