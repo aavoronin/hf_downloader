@@ -14,7 +14,6 @@ ALLOWED_MODELS = [
     # "PipableAI/pip-sql-1.3b",
 ]
 
-
 def TextToText_main():
     root_folder = r"D:\AIs\Any-to-Any"
     manager = TextToTextModelFactory(root_folder)
@@ -22,29 +21,17 @@ def TextToText_main():
     models = manager.list_available_models()
     for i, model in enumerate(models, 1):
         print(f"{i}. {model.name} - {model.size_human}")
-
-    # test_prompts = OracleConverterHelper.get_test_prompts()
-    # testCasesLoader = TestCasesLoaded(r"TestCases\Oracle\Basic")
-    testCasesLoader = TestCasesLoaded(r"TestCases/Oracle/customer_orders")
-    test_prompts = testCasesLoader.get_test_prompts()
-
     if not models:
         print("❌ No models found. Check the path.")
         return
 
     # test_prompts = OracleConverterHelper.get_test_prompts()
-
     for test_case_folder in [r"TestCases/Oracle/Basic",
-                             #r"TestCases/Oracle/customer_orders",
-                             #r"TestCases/Oracle/human_resources",
-                             ]:
+    #r"TestCases/Oracle/customer_orders",
+    r"TestCases/Oracle/human_resources"]:
         test_cases_loader = TestCasesLoaded(test_case_folder)
         test_prompts = test_cases_loader.get_test_prompts()
         apply_models_to_test_cases(manager, models, test_prompts, test_cases_loader)
-
-        #test_cases_loader = TestCasesLoaded(r"TestCases\Oracle\Basic")
-        #test_cases_loader = TestCasesLoaded(r"TestCases/Oracle/customer_orders")
-        #test_cases_loader = TestCasesLoaded(r"TestCases/Oracle/human_resources")
 
 def apply_models_to_test_cases(manager: TextToTextModelFactory, models: list[TextToTextModelInfo], test_prompts: list,
                                testCasesLoader: TestCasesLoaded):
@@ -76,7 +63,6 @@ def apply_models_to_test_cases(manager: TextToTextModelFactory, models: list[Tex
                     'case_results': failed_results
                 })
                 continue
-
             case_results = []
             model_results = []
             for i, prompt in enumerate(test_prompts, 1):
@@ -93,19 +79,16 @@ def apply_models_to_test_cases(manager: TextToTextModelFactory, models: list[Tex
                     print(f"Result Case {i}:\n{output_preview}")
                     print(f"Time: {elapsed_case:.2f}s | Status: {case_success}")
                     model_results.append(predicted_text)
-
                     # Save result files to timestamped folder
                     prompt_len = len(prompt)
                     # Assuming prompt is [Base Prompt] + [SQL Input]
                     # Approximate input script length
                     input_script_len = prompt_len - len(
                         testCasesLoader.prompt_content) if testCasesLoader.prompt_content else prompt_len
-
                     # Try to get model limits from config if available
                     max_tokens = "Unknown"
                     if hasattr(model, '_custom_config') and model._custom_config:
                         max_tokens = str(model._custom_config.get('max_input_tokens', '?'))
-
                     testCasesLoader.save_test_case_result(
                         case_index=i - 1,
                         success=bool(case_success),
@@ -114,19 +97,17 @@ def apply_models_to_test_cases(manager: TextToTextModelFactory, models: list[Tex
                         prompt_text=prompt,
                         input_script_len=input_script_len,
                         output_script_len=len(predicted_text) if predicted_text else 0,
-                        model_max_tokens=max_tokens
+                        model_max_tokens=max_tokens,
+                        model_name=model_name
                     )
-
                 except Exception as e:
                     print(f"Failed Case {i}: {str(e)}")
                     case_results.append(0)
                     model_results.append("")
-
                     # Save result files for failure
                     max_tokens = "Unknown"
                     if hasattr(model, '_custom_config') and model._custom_config:
                         max_tokens = str(model._custom_config.get('max_input_tokens', '?'))
-
                     testCasesLoader.save_test_case_result(
                         case_index=i - 1,
                         success=False,
@@ -137,9 +118,9 @@ def apply_models_to_test_cases(manager: TextToTextModelFactory, models: list[Tex
                         input_script_len=len(prompt) - len(
                             testCasesLoader.prompt_content) if testCasesLoader.prompt_content else len(prompt),
                         output_script_len=0,
-                        model_max_tokens=max_tokens
+                        model_max_tokens=max_tokens,
+                        model_name=model_name
                     )
-
             # Overall success only if ALL test cases succeeded
             overall_success = 1 if all(r == 1 for r in case_results) else 0
             total_elapsed = time.time() - start_time
@@ -164,7 +145,6 @@ def apply_models_to_test_cases(manager: TextToTextModelFactory, models: list[Tex
                 'time_taken': elapsed, 'output': '',
                 'case_results': failed_results
             })
-
     print(f"\n📊 Testing Summary")
     # Dynamic header generation based on number of test cases
     header = f"{'Model':<45}"
@@ -173,7 +153,6 @@ def apply_models_to_test_cases(manager: TextToTextModelFactory, models: list[Tex
     header += f" {'Overall':<8} {'Time (s)':<10}"
     print(header)
     print("-" * len(header))
-
     for r in results:
         cases = r.get('case_results', [0] * num_cases)
         # Ensure cases length exactly matches num_cases
@@ -184,7 +163,6 @@ def apply_models_to_test_cases(manager: TextToTextModelFactory, models: list[Tex
             line += f" {c:<5}"
         line += f" {overall:<8} {r['time_taken']:<10.2f}"
         print(line)
-
     stats = {'test_type': 'text_to_sql_prompt', 'results': results}
     manager.save_statistics(stats)
     print(f"\n💾 Statistics saved to {manager.stats_path}")
