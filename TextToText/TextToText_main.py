@@ -5,9 +5,9 @@ from TextToText.OracleConverterHelper import OracleConverterHelper
 
 ALLOWED_MODELS = [
     # "Qwen/Qwen2.5-Coder-0.5B-Instruct",
-    "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+    # "Qwen/Qwen2.5-Coder-1.5B-Instruct",
     # "Qwen/Qwen2.5-Coder-3B-Instruct",
-    # "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "Qwen/Qwen2.5-Coder-7B-Instruct",
     # "Qwen/Qwen2.5-Coder-14B-Instruct",
     # "PipableAI/pip-sql-1.3b",
     # "prem-research/prem-1B-SQL",
@@ -29,7 +29,8 @@ def TextToText_main():
     # test_prompts = OracleConverterHelper.get_test_prompts()
     for test_case_folder in [r"TestCases/Oracle/Basic",
                              # r"TestCases/Oracle/customer_orders",
-                             r"TestCases/Oracle/human_resources"]:
+                             #r"TestCases/Oracle/human_resources"
+                             ]:
         test_cases_loader = TestCasesLoaded(test_case_folder)
         test_prompts = test_cases_loader.get_test_prompts()
         apply_models_to_test_cases(manager, models, test_prompts, test_cases_loader)

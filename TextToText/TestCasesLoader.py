@@ -4,6 +4,7 @@ from datetime import datetime
 
 
 class TestCasesLoaded:
+    BREAK_MARKER = '\n-- BREAK'
     def __init__(self, folder_path: str):
         self.folder_path = Path(folder_path)
         self.prompt_content = self._load_prompt()
@@ -12,9 +13,13 @@ class TestCasesLoaded:
         self.filenames = [tc["name"] for tc in self.test_cases_data]
 
         # Create output folder structure
+        # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
         out_folder = Path("out") / self.folder_path
+        # Create timestamp folder YYYYMMDDHHMMSS
+        # YYYYMMDDHHMMSS is remembered when the group of test cases is started
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         self.output_dir = out_folder / timestamp
+        # Create the directory structure
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Dictionary to store results for combined output files
@@ -39,11 +44,23 @@ class TestCasesLoaded:
         for sql_file in sql_files:
             with open(sql_file, 'r', encoding='utf-8') as f:
                 sql_content = f.read()
-            cases.append({
-                "name": sql_file.stem,
-                "prompt": f"{self.prompt_content}\n====SCRIPT START====\n{sql_content}\n====SCRIPT START====",
-                "sql": sql_content
-            })
+
+            # Check for the break marker and split into virtual parts if found
+            if TestCasesLoaded.BREAK_MARKER in sql_content:
+                parts = sql_content.split(TestCasesLoaded.BREAK_MARKER)
+                for i, part in enumerate(parts, 1):
+                    part_name = f"{sql_file.stem}_part{i:03d}"
+                    cases.append({
+                        "name": part_name,
+                        "prompt": f"{self.prompt_content}\n====SCRIPT START====\n{part}\n====SCRIPT END====",
+                        "sql": part
+                    })
+            else:
+                cases.append({
+                    "name": sql_file.stem,
+                    "prompt": f"{self.prompt_content}\n====SCRIPT START====\n{sql_content}\n====SCRIPT END====",
+                    "sql": sql_content
+                })
         return cases
 
     def get_test_prompts(self) -> list:
@@ -136,6 +153,7 @@ class TestCasesLoaded:
                 f.write(res["log_content"])
                 f.write("\n")
                 f.write(res["original_sql"])
+                f.write("\n")
                 f.write("*/\n")
                 f.write("\n")
                 f.write(f"{res['output_sql']}\n\n")
