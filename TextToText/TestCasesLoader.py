@@ -12,17 +12,13 @@ class TestCasesLoaded:
         self.filenames = [tc["name"] for tc in self.test_cases_data]
 
         # Create output folder structure
-        # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
         out_folder = Path("out") / self.folder_path
-        # Create timestamp folder YYYYMMDDHHMMSS
-        # YYYYMMDDHHMMSS is remembered when the group of test cases is started
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         self.output_dir = out_folder / timestamp
-        # Create the directory structure
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create combined file all_test_cases.sql in the same output directory
-        self._create_combined_sql()
+        # Dictionary to store results for combined output files
+        self.results_data = {}
 
     def _load_prompt(self) -> str:
         """Load PROMPT.txt content. Returns empty string if not found."""
@@ -50,16 +46,6 @@ class TestCasesLoaded:
             })
         return cases
 
-    def _create_combined_sql(self):
-        """Create combined all_test_cases.sql in the output directory."""
-        if not self.test_cases_data:
-            return
-        combined_path = self.output_dir / "all_test_cases.sql"
-        with open(combined_path, 'w', encoding='utf-8') as f:
-            for tc in self.test_cases_data:
-                f.write(f"-- {tc['name']}\n")
-                f.write(f"{tc['sql']}\n")
-
     def get_test_prompts(self) -> list:
         """Return the list of combined prompt + SQL test cases."""
         return self.test_prompts
@@ -71,6 +57,7 @@ class TestCasesLoaded:
                               model_name: str = ""):
         """
         Saves the 3 result files for a specific test case into the timestamped output directory.
+        Also stores data for combined output files.
         """
         if 0 <= case_index < len(self.filenames):
             basename = self.filenames[case_index]
@@ -89,14 +76,66 @@ class TestCasesLoaded:
 
         # 3. test_case.log -> basename.log
         log_file = self.output_dir / f"{basename}.log"
+        log_content = (
+            f"Test Case: {basename}\n"
+            f"Model: {model_name}\n"
+            f"Status: {'Success' if success else 'Failure'}\n"
+            f"Error: {error_msg if error_msg else 'None'}\n"
+            f"Time Taken: {time_taken:.4f}s\n"
+            f"Prompt Length: {len(prompt_text)}\n"
+            f"Input Tokens (Approx): {len(prompt_text)}\n"
+            f"Model Max Input/Output Tokens: {model_max_tokens}\n"
+            f"Length of Input Script: {input_script_len}\n"
+            f"Length of Output Script: {output_script_len}\n"
+        )
         with open(log_file, 'w', encoding='utf-8') as f:
-            f.write(f"Test Case: {basename}\n")
-            f.write(f"Model: {model_name}\n")
-            f.write(f"Status: {'Success' if success else 'Failure'}\n")
-            f.write(f"Error: {error_msg if error_msg else 'None'}\n")
-            f.write(f"Time Taken: {time_taken:.4f}s\n")
-            f.write(f"Prompt Length: {len(prompt_text)}\n")
-            f.write(f"Input Tokens (Approx): {len(prompt_text)}\n")
-            f.write(f"Model Max Input/Output Tokens: {model_max_tokens}\n")
-            f.write(f"Length of Input Script: {input_script_len}\n")
-            f.write(f"Length of Output Script: {output_script_len}\n")
+            f.write(log_content)
+
+        # Find original SQL for this case
+        original_sql = ""
+        for tc in self.test_cases_data:
+            if tc["name"] == basename:
+                original_sql = tc["sql"]
+                break
+
+        # Escape nested comments in original query
+        escaped_original_sql = original_sql.replace("/*", "/ *").replace("*/", "* /")
+
+        # Store for combined files generation
+        self.results_data[basename] = {
+            "log_content": log_content,
+            "original_sql": escaped_original_sql,
+            "output_sql": output_text if output_text else ""
+        }
+
+    def save_combined_output_files(self):
+        """
+        Generates all_test_cases.sql and all_test_cases_ext.sql
+        containing the model outputs, sorted ASC by test case name.
+        """
+        if not self.results_data:
+            return
+
+        # Sort test cases ASC by name
+        sorted_names = sorted(self.results_data.keys())
+
+        # Create all_test_cases.sql
+        combined_sql_path = self.output_dir / "all_test_cases.sql"
+        with open(combined_sql_path, 'w', encoding='utf-8') as f:
+            for name in sorted_names:
+                res = self.results_data[name]
+                f.write(f"-- {name}\n")
+                f.write(f"{res['output_sql']}\n")
+
+        # Create all_test_cases_ext.sql
+        combined_ext_sql_path = self.output_dir / "all_test_cases_ext.sql"
+        with open(combined_ext_sql_path, 'w', encoding='utf-8') as f:
+            for name in sorted_names:
+                res = self.results_data[name]
+                f.write("/*\n")
+                f.write(res["log_content"])
+                f.write("\n")
+                f.write(res["original_sql"])
+                f.write("*/\n")
+                f.write("\n")
+                f.write(f"{res['output_sql']}\n\n")

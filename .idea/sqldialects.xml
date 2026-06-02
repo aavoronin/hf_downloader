@@ -1,16 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="SqlDialectMappings">
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case10.sql" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case11.sql" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case2.sql" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case3.sql" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case4.sql" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case5.sql" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case6.sql" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case7.sql" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case8.sql" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestCases/Oracle/Basic/test_case9.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/TestCases/Oracle/customer_orders/co_create.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/TestCases/Oracle/customer_orders/co_install.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/TestCases/Oracle/customer_orders/co_populate.sql" dialect="GenericSQL" />
