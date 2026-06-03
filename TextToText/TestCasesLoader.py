@@ -5,6 +5,7 @@ from datetime import datetime
 
 class TestCasesLoaded:
     BREAK_MARKER = '\n-- BREAK'
+
     def __init__(self, folder_path: str):
         self.folder_path = Path(folder_path)
         self.prompt_content = self._load_prompt()
@@ -122,7 +123,13 @@ class TestCasesLoaded:
         self.results_data[basename] = {
             "log_content": log_content,
             "original_sql": escaped_original_sql,
-            "output_sql": output_text if output_text else ""
+            "output_sql": output_text if output_text else "",
+            "success": success,
+            "time_taken": time_taken,
+            "prompt_length": len(prompt_text),
+            "input_tokens": len(prompt_text),
+            "input_script_len": input_script_len,
+            "output_script_len": output_script_len
         }
 
     def save_combined_output_files(self):
@@ -136,6 +143,16 @@ class TestCasesLoaded:
         # Sort test cases ASC by name
         sorted_names = sorted(self.results_data.keys())
 
+        # Calculate total statistics
+        num_test_cases = len(self.results_data)
+        num_success = sum(1 for res in self.results_data.values() if res["success"])
+        num_errors = num_test_cases - num_success
+        total_time = sum(res["time_taken"] for res in self.results_data.values())
+        total_prompt_len = sum(res["prompt_length"] for res in self.results_data.values())
+        total_input_tokens = sum(res["input_tokens"] for res in self.results_data.values())
+        total_input_script_len = sum(res["input_script_len"] for res in self.results_data.values())
+        total_output_script_len = sum(res["output_script_len"] for res in self.results_data.values())
+
         # Create all_test_cases.sql
         combined_sql_path = self.output_dir / "all_test_cases.sql"
         with open(combined_sql_path, 'w', encoding='utf-8') as f:
@@ -147,6 +164,19 @@ class TestCasesLoaded:
         # Create all_test_cases_ext.sql
         combined_ext_sql_path = self.output_dir / "all_test_cases_ext.sql"
         with open(combined_ext_sql_path, 'w', encoding='utf-8') as f:
+            # Add total statistics at the beginning
+            f.write("/*\n")
+            f.write(f"Number of Test Cases: {num_test_cases}\n")
+            f.write(f"Number of Success: {num_success}\n")
+            f.write(f"Number of Errors: {num_errors}\n")
+            f.write(f"Total Time Taken: {total_time:.4f}s\n")
+            f.write(f"Total Prompt Length: {total_prompt_len}\n")
+            f.write(f"Total Input Tokens: {total_input_tokens}\n")
+            f.write(f"Total Length of Input Script: {total_input_script_len}\n")
+            f.write(f"Total Length of Output Script: {total_output_script_len}\n")
+            f.write("========\n")
+            f.write("*/\n\n")
+
             for name in sorted_names:
                 res = self.results_data[name]
                 f.write("/*\n")
@@ -156,4 +186,4 @@ class TestCasesLoaded:
                 f.write("\n")
                 f.write("*/\n")
                 f.write("\n")
-                f.write(f"{res['output_sql']}\n\n")
+                f.write(f"{res['output_sql']}\n")

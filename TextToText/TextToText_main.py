@@ -4,10 +4,10 @@ from TextToText.TextToTextModelFactory import TextToTextModelFactory, TextToText
 from TextToText.OracleConverterHelper import OracleConverterHelper
 
 ALLOWED_MODELS = [
-    # "Qwen/Qwen2.5-Coder-0.5B-Instruct",
-    # "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+    "Qwen/Qwen2.5-Coder-0.5B-Instruct",
+    "Qwen/Qwen2.5-Coder-1.5B-Instruct",
     # "Qwen/Qwen2.5-Coder-3B-Instruct",
-    "Qwen/Qwen2.5-Coder-7B-Instruct",
+    # "Qwen/Qwen2.5-Coder-7B-Instruct",
     # "Qwen/Qwen2.5-Coder-14B-Instruct",
     # "PipableAI/pip-sql-1.3b",
     # "prem-research/prem-1B-SQL",
