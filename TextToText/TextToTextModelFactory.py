@@ -3,34 +3,9 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, List, Any
-from dataclasses import dataclass, asdict
 from TextToText.TextToTextModel import TextToTextModel
-
-@dataclass
-class TextToTextModelErrorLog:
-    model_name: str
-    error_count: int = 0
-    last_error_date: Optional[str] = None
-    last_error_message: Optional[str] = None
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict):
-        return cls(**data)
-
-@dataclass
-class TextToTextModelInfo:
-    name: str
-    folder_name: str
-    size_bytes: int
-    size_human: str
-    path: Path
-    files: List[str]
-
-    def to_dict(self) -> dict:
-        return asdict(self)
+from TextToText.TextToTextModelErrorLog import TextToTextModelErrorLog
+from TextToText.TextToTextModelInfo import TextToTextModelInfo
 
 GLOBAL_CONFIG = {
     "max_errors_threshold": 20,
