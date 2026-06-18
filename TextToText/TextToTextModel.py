@@ -298,8 +298,8 @@ def _init_gemma4_gguf(model_path: str, device: str) -> Dict[str, Any]:
     print(f"   [GGUF] Loading {gguf_path} via llama-cpp-python...")
     # Determine GPU layers: -1 for all on GPU if CUDA available, 0 for CPU
     n_gpu_layers = -1 if device == "cuda" else 0
-    # Context window size. 8192 is standard, lower it if you run out of RAM.
-    n_ctx = 8192
+    # Context window size. 131072 matches the model's training capacity.
+    n_ctx = 131072
     llm = Llama(
         model_path=gguf_path,
         n_ctx=n_ctx,
