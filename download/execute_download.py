@@ -24,6 +24,7 @@ def execute_download():
         lister.show_results()
     """
 
+    """
     start_urls = [
         "https://huggingface.co/models?sort=likes"
 
@@ -35,17 +36,19 @@ def execute_download():
             download_models_info(root_folder,
                 start_urls=[start_url], first_only = False)
     return
+    """
 
     start_urls = [
         #"https://huggingface.co/models?pipeline_tag=any-to-any&sort=downloads",
         #"https://huggingface.co/models?pipeline_tag=any-to-any&num_parameters=min:6B,max:9B&sort=downloads",
         #"https://huggingface.co/models?pipeline_tag=any-to-any&num_parameters=min:6B,max:9B&sort=likes",
+        "https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-32B-Instruct",
         #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-7B-Instruct",
         #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-14B-Instruct",
         #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-1.5B-Instruct",
         #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-3B-Instruct",
         #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-0.5B-Instruct",
-
+        #"https://huggingface.co/models?sort=likes&search=Bhuvneesh%2Fgemma-4-E4B-it-Q8_0-GGUF",
     ]
     root_folder = r"D:\AIs\Any-to-Any"
     HFModelLister.MAX_PAGES = 1

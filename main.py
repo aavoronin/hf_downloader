@@ -11,8 +11,10 @@ from download.download_aidio_dataset_russian import download_librispeech_english
 from download.download_mp3 import download_alice
 from download.execute_download import execute_download
 from download.export_audio_samples import export_audio, do_export_10_samples
+from project_to_file.project_to_file import project_to_file_main
 
 if __name__ == "__main__":
+    project_to_file_main()
     #execute_download()
     TextToText_main()
     #download_alice()

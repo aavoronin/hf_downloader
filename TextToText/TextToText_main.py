@@ -6,12 +6,15 @@ from TextToText.TextToTextModelInfo import TextToTextModelInfo
 ALLOWED_MODELS = [
     # "Qwen/Qwen2.5-Coder-0.5B-Instruct",
     # "Qwen/Qwen2.5-Coder-1.5B-Instruct",
-    "Qwen/Qwen2.5-Coder-3B-Instruct",
+    # "Qwen/Qwen2.5-Coder-3B-Instruct",
     # "Qwen/Qwen2.5-Coder-7B-Instruct",
     # "Qwen/Qwen2.5-Coder-14B-Instruct",
     # "PipableAI/pip-sql-1.3b",
     # "prem-research/prem-1B-SQL",
     # "PipableAI/pip-sql-1.3b",
+    #"Bhuvneesh/gemma-4-E4B-it-Q8_0-GGUF",
+    #"locailabs/Jupiter-G-8B",
+    "OneThink/OneThinker-8B",
 ]
 
 
