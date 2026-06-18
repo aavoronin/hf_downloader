@@ -23,15 +23,28 @@ def execute_download():
         lister.fetch_all_pages()
         lister.show_results()
     """
+
+    start_urls = [
+        "https://huggingface.co/models?sort=likes"
+
+    ]
+    root_folder = r"D:\AIs\Info"
+    HFModelLister.MAX_PAGES = 10
+    for start_url in start_urls:
+        for _ in range(1):
+            download_models_info(root_folder,
+                start_urls=[start_url], first_only = False)
+    return
+
     start_urls = [
         #"https://huggingface.co/models?pipeline_tag=any-to-any&sort=downloads",
         #"https://huggingface.co/models?pipeline_tag=any-to-any&num_parameters=min:6B,max:9B&sort=downloads",
         #"https://huggingface.co/models?pipeline_tag=any-to-any&num_parameters=min:6B,max:9B&sort=likes",
         #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-7B-Instruct",
         #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-14B-Instruct",
-        "https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-1.5B-Instruct",
-        "https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-3B-Instruct",
-        "https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-0.5B-Instruct",
+        #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-1.5B-Instruct",
+        #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-3B-Instruct",
+        #"https://huggingface.co/models?sort=likes&search=Qwen%2FQwen2.5-Coder-0.5B-Instruct",
 
     ]
     root_folder = r"D:\AIs\Any-to-Any"
@@ -103,6 +116,15 @@ def execute_download():
     downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder,
                                           exclude = exclude)
     download_certain_type_of_models(root_folder, start_urls, exclude)
+
+def download_models_info(root_folder: str,
+                         start_urls: list[str],
+                         exclude: List[str] = [],
+                         first_only=False):
+    downloader = MultipleModelsDownloader(start_urls=start_urls, root_folder=root_folder,
+                                          exclude=exclude)
+    downloader.process_urls()
+    downloader.download_model_pages()
 
 
 def download_certain_type_of_models(root_folder: str,
