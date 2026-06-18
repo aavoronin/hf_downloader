@@ -249,7 +249,7 @@ class MultipleModelsDownloader:
 
             safe_name = model_id.replace("/", "_")
             model_folder = self.root_folder / safe_name
-            mhtml_path = model_folder / "model_page.mhtml"
+            mhtml_path = model_folder / "model_page.html"
 
             #if mhtml_path.exists():
             #    print(f"✓ {model_id}: model_page.mhtml already exists")

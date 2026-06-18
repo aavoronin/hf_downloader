@@ -29,7 +29,7 @@ def execute_download():
 
     ]
     root_folder = r"D:\AIs\Info"
-    HFModelLister.MAX_PAGES = 10
+    HFModelLister.MAX_PAGES = 20
     for start_url in start_urls:
         for _ in range(1):
             download_models_info(root_folder,

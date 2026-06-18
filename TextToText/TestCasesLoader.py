@@ -72,7 +72,8 @@ class TestCasesLoaded:
                               time_taken: float, error_msg: str = "",
                               prompt_text: str = "", input_script_len: int = 0,
                               output_script_len: int = 0, model_max_tokens: str = "",
-                              model_name: str = ""):
+                              model_name: str = "",
+                              output_file_extension: str = "sql"):
         """
         Saves the 3 result files for a specific test case into the timestamped output directory.
         Also stores data for combined output files.
@@ -83,7 +84,7 @@ class TestCasesLoaded:
             basename = f"case_{case_index}"
 
         # 1. test_case.sql (Result) -> basename.sql
-        sql_file = self.output_dir / f"{basename}.sql"
+        sql_file = self.output_dir / f"{basename}.{output_file_extension}"
         with open(sql_file, 'w', encoding='utf-8') as f:
             f.write(output_text if output_text else "")
 
