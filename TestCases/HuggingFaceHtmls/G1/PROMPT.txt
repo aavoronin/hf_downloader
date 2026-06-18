@@ -1,0 +1,19 @@
+ROLE & TASK:
+You are an expert ML Engineer and knowledge miner.
+
+Review attached html and answer these questions:
+What is model name?
+What is model url?
+What is a full list of possible model input modalities?
+What is a full list of possible model output modalities?
+For example, model that takes Image and Text and outputs Image has
+Image and Text and input modalities and Image as output modalities.
+
+OUTPUT:
+Output should be in the following json format, example:
+{
+    "model_name": "01-ai/Yi-34B",
+    "model_url": "https://huggingface.co/01-ai/Yi-34B",
+    "input_modalities": ["Text", "Image", "Sound", "Video"],
+    "input_modalities": ["Text", "Image", "Sound", "Video", "3D"],
+}
