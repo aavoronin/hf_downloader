@@ -12,9 +12,9 @@ ALLOWED_MODELS = [
     # "PipableAI/pip-sql-1.3b",
     # "prem-research/prem-1B-SQL",
     # "PipableAI/pip-sql-1.3b",
-    #"Bhuvneesh/gemma-4-E4B-it-Q8_0-GGUF",
+    "Bhuvneesh/gemma-4-E4B-it-Q8_0-GGUF",
     #"locailabs/Jupiter-G-8B",
-    "OneThink/OneThinker-8B",
+    #"OneThink/OneThinker-8B",
 ]
 
 
