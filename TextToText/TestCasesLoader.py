@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime
 from bs4 import BeautifulSoup, Comment
 
+
 class TestCasesLoaded:
     BREAK_MARKER = '\n-- BREAK'
 
@@ -17,12 +18,10 @@ class TestCasesLoaded:
         # Create output folder structure
         # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
         out_folder = Path("out") / self.folder_path
-
         # Create timestamp folder YYYYMMDDHHMMSS
         # YYYYMMDDHHMMSS is remembered when the group of test cases is started
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         self.output_dir = out_folder / timestamp
-
         # Create the directory structure
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -179,7 +178,8 @@ class TestCasesLoaded:
             f.write(f"Total Length of Input Script: {total_input_script_len}\n")
             f.write(f"Total Length of Output Script: {total_output_script_len}\n")
             f.write("========\n")
-            f.write("*/\n")
+            f.write("*/\n\n")
+
             for name in sorted_names:
                 res = self.results_data[name]
                 f.write("/*\n")
@@ -205,12 +205,10 @@ class HtmlCasesLoaded(TestCasesLoaded):
         # Create output folder structure
         # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
         out_folder = Path("out") / self.folder_path
-
         # Create timestamp folder YYYYMMDDHHMMSS
         # YYYYMMDDHHMMSS is remembered when the group of test cases is started
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         self.output_dir = out_folder / timestamp
-
         # Create the directory structure
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -257,14 +255,19 @@ class HtmlCasesLoaded(TestCasesLoaded):
         target_dir = original_path.parent if original_path else self.output_dir
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Save result as JSON
-        json_file = target_dir / f"{basename}.json"
-        with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(output_text, f, indent=2, ensure_ascii=False)
-
-        #prompt_file = target_dir / f"{basename}_PROMPT.txt"
-        #with open(prompt_file, 'w', encoding='utf-8') as f:
-        #    json.dump(output_text, f, indent=2, ensure_ascii=False)
+        # 1. Save result as JSON or text
+        try:
+            if not output_text:
+                raise ValueError("Empty output text")
+            parsed_data = json.loads(output_text)
+            file_path = target_dir / f"{basename}.json"
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            print(f"⚠ JSON validation failed for {basename}: {e}. Saving as text.")
+            file_path = target_dir / f"{basename}.txt"
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(output_text if output_text else "")
 
         # 2. Save log file
         log_file = target_dir / f"{basename}.log"
@@ -324,7 +327,5 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         html_content_stripped = str(soup)
         stripped_len = len(html_content_stripped)
-
         print(f"html stripped: {original_len} -> {stripped_len}")
-
         return html_content_stripped
