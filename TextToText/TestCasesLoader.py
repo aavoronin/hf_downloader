@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 from datetime import datetime
 
@@ -188,3 +189,109 @@ class TestCasesLoaded:
                 f.write("*/\n")
                 f.write("\n")
                 f.write(f"{res['output_sql']}\n")
+
+
+class HtmlCasesLoaded(TestCasesLoaded):
+    BREAK_MARKER = '\n-- BREAK'
+
+    def __init__(self, folder_path: str):
+        self.folder_path = Path(folder_path)
+        self.prompt_content = self._load_prompt()
+        self.test_cases_data = self._load_html_cases()
+        self.test_prompts = [tc["prompt"] for tc in self.test_cases_data]
+        self.filenames = [tc["name"] for tc in self.test_cases_data]
+
+        # Create output folder structure
+        # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
+        out_folder = Path("out") / self.folder_path
+        # Create timestamp folder YYYYMMDDHHMMSS
+        # YYYYMMDDHHMMSS is remembered when the group of test cases is started
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        self.output_dir = out_folder / timestamp
+        # Create the directory structure
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Dictionary to store results for combined output files
+        self.results_data = {}
+
+    def _load_html_cases(self) -> list:
+        """Scan for .html files recursively and attach prompt to each."""
+        if not self.prompt_content:
+            return []
+        html_files = sorted(self.folder_path.rglob("*.html"))
+        if not html_files:
+            return []
+
+        cases = []
+        for html_file in html_files:
+            with open(html_file, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            cases.append({
+                "name": html_file.stem,
+                "prompt": f"{self.prompt_content}\n{html_content}\n",
+                "path": html_file
+            })
+        return cases
+
+    def save_test_case_result(self, case_index: int, success: bool, output_text: str,
+                              time_taken: float, error_msg: str = "",
+                              prompt_text: str = "", input_script_len: int = 0,
+                              output_script_len: int = 0, model_max_tokens: str = "",
+                              model_name: str = ""):
+        """
+        Saves the resulting file (model output) as .json and a log file
+        in the same folder as the original HTML file.
+        """
+        if 0 <= case_index < len(self.test_cases_data):
+            case_data = self.test_cases_data[case_index]
+        else:
+            case_data = {"name": f"case_{case_index}", "path": None}
+
+        basename = case_data.get("name", f"case_{case_index}")
+        original_path = case_data.get("path")
+
+        # Determine target directory: same folder as the original HTML file
+        target_dir = original_path.parent if original_path else self.output_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. Save result as JSON
+        json_file = target_dir / f"{basename}.json"
+        result_data = {
+            "test_case": basename,
+            "model": model_name,
+            "success": success,
+            "error": error_msg if error_msg else None,
+            "time_taken_seconds": time_taken,
+            "output_text": output_text if output_text else ""
+        }
+        with open(json_file, 'w', encoding='utf-8') as f:
+            json.dump(result_data, f, indent=2, ensure_ascii=False)
+
+        # 2. Save log file
+        log_file = target_dir / f"{basename}.log"
+        log_content = (
+            f"Test Case: {basename}\n"
+            f"Model: {model_name}\n"
+            f"Status: {'Success' if success else 'Failure'}\n"
+            f"Error: {error_msg if error_msg else 'None'}\n"
+            f"Time Taken: {time_taken:.4f}s\n"
+            f"Prompt Length: {len(prompt_text)}\n"
+            f"Input Tokens (Approx): {len(prompt_text)}\n"
+            f"Model Max Input/Output Tokens: {model_max_tokens}\n"
+            f"Length of Input Script: {input_script_len}\n"
+            f"Length of Output Script: {output_script_len}\n"
+        )
+        with open(log_file, 'w', encoding='utf-8') as f:
+            f.write(log_content)
+
+        # Store for potential combined outputs later
+        self.results_data[basename] = {
+            "log_content": log_content,
+            "output_text": output_text if output_text else "",
+            "success": success,
+            "time_taken": time_taken,
+            "prompt_length": len(prompt_text),
+            "input_script_len": input_script_len,
+            "output_script_len": output_script_len,
+            "original_path": str(original_path)
+        }
