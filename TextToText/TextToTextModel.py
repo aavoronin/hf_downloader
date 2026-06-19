@@ -573,11 +573,28 @@ class TextToTextModel:
                 self._custom_config = config
                 return
 
+#    def _determine_device(self) -> str:
+#        if torch.cuda.is_available():
+#            return "cuda"
+#        print(f"⚠ GPU unavailable, using CPU for {self.model_name}")
+#        return "cpu"
+
     def _determine_device(self) -> str:
-        if torch.cuda.is_available():
-            return "cuda"
-        print(f"⚠ GPU unavailable, using CPU for {self.model_name}")
-        return "cpu"
+        if not torch.cuda.is_available():
+            print(f"⚠ GPU unavailable, using CPU for {self.model_name}")
+            return "cpu"
+
+        # Find and select NVIDIA RTX 5070 Ti specifically
+        for i in range(torch.cuda.device_count()):
+            gpu_name = torch.cuda.get_device_name(i)
+            if "RTX 5070 Ti" in gpu_name or "RTX" in gpu_name:
+                print(f"✓ Found NVIDIA GPU: {gpu_name}")
+                torch.cuda.set_device(i)
+                return f"cuda:{i}"
+
+        # Fallback to first CUDA device if RTX not found
+        print(f"⚠ RTX GPU not found, using default CUDA device")
+        return "cuda"
 
     def _load_pipeline(self):
         if self._pipeline is not None or self._custom_objects is not None:

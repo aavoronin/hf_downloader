@@ -8,12 +8,25 @@ What is a full list of possible model input modalities?
 What is a full list of possible model output modalities?
 For example, model that takes Image and Text and outputs Image has
 Image and Text and input modalities and Image as output modalities.
+How many layers model has?
+How many input tokens it accepts?
+How many output tokens it accepts?
+What is the code snippet or example that runs model?
+What is link to requirements.txt file?
+Does the model support GPU?
 
 OUTPUT:
-Output should be in the following json format, example:
+Output should be in the following json format,
+(only those fields that have answers), example:
 {
     "model_name": "01-ai/Yi-34B",
     "model_url": "https://huggingface.co/01-ai/Yi-34B",
     "input_modalities": ["Text", "Image", "Sound", "Video"],
     "input_modalities": ["Text", "Image", "Sound", "Video", "3D"],
+    "layers": 32,
+    "input_tokens": 100000,
+    "output_tokens": 200000,
+    "code": "code snipper",
+    "requirements_link": "http://..../requirements.txt",
+    "supports_GPU": True,
 }

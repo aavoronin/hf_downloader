@@ -259,16 +259,12 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         # 1. Save result as JSON
         json_file = target_dir / f"{basename}.json"
-        result_data = {
-            "test_case": basename,
-            "model": model_name,
-            "success": success,
-            "error": error_msg if error_msg else None,
-            "time_taken_seconds": time_taken,
-            "output_text": output_text if output_text else ""
-        }
         with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(result_data, f, indent=2, ensure_ascii=False)
+            json.dump(output_text, f, indent=2, ensure_ascii=False)
+
+        #prompt_file = target_dir / f"{basename}_PROMPT.txt"
+        #with open(prompt_file, 'w', encoding='utf-8') as f:
+        #    json.dump(output_text, f, indent=2, ensure_ascii=False)
 
         # 2. Save log file
         log_file = target_dir / f"{basename}.log"
@@ -310,7 +306,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
         soup = BeautifulSoup(html_content, 'html.parser')
 
         # 1) Remove <head>, <script>, <svg> tags and their content
-        for tag_name in ['head', 'script', 'svg']:
+        for tag_name in ['head', 'script', 'svg', 'path', 'defs']:
             for tag in soup.find_all(tag_name):
                 tag.decompose()
 

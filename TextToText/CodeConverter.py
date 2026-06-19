@@ -234,7 +234,8 @@ class KnowledgeMiner:
             return {
                 'model_name': self.model_name, 'success': overall_success == 1,
                 'time_taken': total_elapsed, 'output': model_results,
-                'case_results': case_results
+                'case_results': case_results,
+                'prompt': prompt
             }
         except Exception as e:
             elapsed = time.time() - start_time

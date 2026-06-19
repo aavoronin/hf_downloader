@@ -102,9 +102,6 @@ def apply_models_to_htmls(manager: TextToTextModelFactory,
         result = miner.run()
         results.append(result)
 
-    # Generate combined output files after all models have been processed
-    test_cases_loader.save_test_case_result()
-
     print(f"\n📊 Testing Summary")
     header = f"{'Model':<45}"
     for i in range(1, num_cases + 1):
