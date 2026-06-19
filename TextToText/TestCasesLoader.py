@@ -2,7 +2,7 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime
-
+from bs4 import BeautifulSoup, Comment
 
 class TestCasesLoaded:
     BREAK_MARKER = '\n-- BREAK'
@@ -17,10 +17,12 @@ class TestCasesLoaded:
         # Create output folder structure
         # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
         out_folder = Path("out") / self.folder_path
+
         # Create timestamp folder YYYYMMDDHHMMSS
         # YYYYMMDDHHMMSS is remembered when the group of test cases is started
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         self.output_dir = out_folder / timestamp
+
         # Create the directory structure
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -177,8 +179,7 @@ class TestCasesLoaded:
             f.write(f"Total Length of Input Script: {total_input_script_len}\n")
             f.write(f"Total Length of Output Script: {total_output_script_len}\n")
             f.write("========\n")
-            f.write("*/\n\n")
-
+            f.write("*/\n")
             for name in sorted_names:
                 res = self.results_data[name]
                 f.write("/*\n")
@@ -204,10 +205,12 @@ class HtmlCasesLoaded(TestCasesLoaded):
         # Create output folder structure
         # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
         out_folder = Path("out") / self.folder_path
+
         # Create timestamp folder YYYYMMDDHHMMSS
         # YYYYMMDDHHMMSS is remembered when the group of test cases is started
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         self.output_dir = out_folder / timestamp
+
         # Create the directory structure
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -221,11 +224,11 @@ class HtmlCasesLoaded(TestCasesLoaded):
         html_files = sorted(self.folder_path.rglob("*.html"))
         if not html_files:
             return []
-
         cases = []
         for html_file in html_files:
             with open(html_file, 'r', encoding='utf-8') as f:
                 html_content = f.read()
+            html_content = self.clean_html(html_content)
             cases.append({
                 "name": html_file.stem,
                 "prompt": f"{self.prompt_content}\n{html_content}\n",
@@ -295,3 +298,37 @@ class HtmlCasesLoaded(TestCasesLoaded):
             "output_script_len": output_script_len,
             "original_path": str(original_path)
         }
+
+    def clean_html(self, html_content):
+        """
+        Clean HTML content by removing specific tags, attributes, and comments.
+        1) Remove <head>, <script>, <svg> tags with their content.
+        2) Remove style, class, id, xmlns, rel attributes from any tags.
+        3) Remove all HTML comments (e.g., <!-- comment -->).
+        """
+        original_len = len(html_content)
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # 1) Remove <head>, <script>, <svg> tags and their content
+        for tag_name in ['head', 'script', 'svg']:
+            for tag in soup.find_all(tag_name):
+                tag.decompose()
+
+        # 2) Remove style, class, id, xmlns, rel attributes from all tags
+        attrs_to_remove = ['style', 'class', 'id', 'xmlns', 'rel']
+        for tag in soup.find_all(True):
+            for attr in attrs_to_remove:
+                if tag.has_attr(attr):
+                    del tag[attr]
+
+        # 3) Remove HTML comments (including malformed ones like <!--[-1-->)
+        # BeautifulSoup parses <!-- ... --> as Comment nodes
+        for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+            comment.extract()
+
+        html_content_stripped = str(soup)
+        stripped_len = len(html_content_stripped)
+
+        print(f"html stripped: {original_len} -> {stripped_len}")
+
+        return html_content_stripped
