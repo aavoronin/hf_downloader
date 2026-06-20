@@ -29,7 +29,10 @@ def TextToText_main():
         print("❌ No models found. Check the path.")
         return
 
-    for test_case_folder in [r"TestCases/HuggingFaceHtmls/G1"]:
+    for test_case_folder in [
+        #r"TestCases/HuggingFaceHtmls/G1"
+        r"D:\AIs\Info"
+    ]:
         test_cases_loader = HtmlCasesLoaded(test_case_folder)
         apply_models_to_htmls(manager, models, test_cases_loader)
 

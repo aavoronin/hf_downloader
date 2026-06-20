@@ -14,6 +14,7 @@ How many output tokens it accepts?
 What is the code snippet or example that runs model?
 What is link to requirements.txt file?
 Does the model support GPU?
+What is url to github repository of the model?
 
 OUTPUT:
 Output should be in the following json format,
@@ -29,4 +30,5 @@ Output should be in the following json format,
     "code": "code snipper",
     "requirements_link": "http://..../requirements.txt",
     "supports_GPU": True,
+    "github_repository_url": "https://github.com/...."
 }

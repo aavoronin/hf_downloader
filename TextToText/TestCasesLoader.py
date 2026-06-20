@@ -2,6 +2,8 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime
+from sys import exception
+
 from bs4 import BeautifulSoup, Comment
 
 
@@ -14,7 +16,6 @@ class TestCasesLoaded:
         self.test_cases_data = self._load_test_cases()
         self.test_prompts = [tc["prompt"] for tc in self.test_cases_data]
         self.filenames = [tc["name"] for tc in self.test_cases_data]
-
         # Create output folder structure
         # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
         out_folder = Path("out") / self.folder_path
@@ -24,7 +25,6 @@ class TestCasesLoaded:
         self.output_dir = out_folder / timestamp
         # Create the directory structure
         self.output_dir.mkdir(parents=True, exist_ok=True)
-
         # Dictionary to store results for combined output files
         self.results_data = {}
 
@@ -47,7 +47,6 @@ class TestCasesLoaded:
         for sql_file in sql_files:
             with open(sql_file, 'r', encoding='utf-8') as f:
                 sql_content = f.read()
-
             # Check for the break marker and split into virtual parts if found
             if TestCasesLoaded.BREAK_MARKER in sql_content:
                 parts = sql_content.split(TestCasesLoaded.BREAK_MARKER)
@@ -84,17 +83,14 @@ class TestCasesLoaded:
             basename = self.filenames[case_index]
         else:
             basename = f"case_{case_index}"
-
         # 1. test_case.sql (Result) -> basename.sql
         sql_file = self.output_dir / f"{basename}.{output_file_extension}"
         with open(sql_file, 'w', encoding='utf-8') as f:
             f.write(output_text if output_text else "")
-
         # 2. test_case_PROMPT.txt (Full prompt) -> basename_PROMPT.txt
         prompt_file = self.output_dir / f"{basename}_PROMPT.txt"
         with open(prompt_file, 'w', encoding='utf-8') as f:
             f.write(prompt_text)
-
         # 3. test_case.log -> basename.log
         log_file = self.output_dir / f"{basename}.log"
         log_content = (
@@ -111,17 +107,14 @@ class TestCasesLoaded:
         )
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(log_content)
-
         # Find original SQL for this case
         original_sql = ""
         for tc in self.test_cases_data:
             if tc["name"] == basename:
                 original_sql = tc["sql"]
                 break
-
         # Escape nested comments in original query
         escaped_original_sql = original_sql.replace("/*", "/ *").replace("*/", "* /")
-
         # Store for combined files generation
         self.results_data[basename] = {
             "log_content": log_content,
@@ -142,10 +135,8 @@ class TestCasesLoaded:
         """
         if not self.results_data:
             return
-
         # Sort test cases ASC by name
         sorted_names = sorted(self.results_data.keys())
-
         # Calculate total statistics
         num_test_cases = len(self.results_data)
         num_success = sum(1 for res in self.results_data.values() if res["success"])
@@ -155,7 +146,6 @@ class TestCasesLoaded:
         total_input_tokens = sum(res["input_tokens"] for res in self.results_data.values())
         total_input_script_len = sum(res["input_script_len"] for res in self.results_data.values())
         total_output_script_len = sum(res["output_script_len"] for res in self.results_data.values())
-
         # Create all_test_cases.sql
         combined_sql_path = self.output_dir / "all_test_cases.sql"
         with open(combined_sql_path, 'w', encoding='utf-8') as f:
@@ -163,7 +153,6 @@ class TestCasesLoaded:
                 res = self.results_data[name]
                 f.write(f"-- {name}\n")
                 f.write(f"{res['output_sql']}\n")
-
         # Create all_test_cases_ext.sql
         combined_ext_sql_path = self.output_dir / "all_test_cases_ext.sql"
         with open(combined_ext_sql_path, 'w', encoding='utf-8') as f:
@@ -178,8 +167,7 @@ class TestCasesLoaded:
             f.write(f"Total Length of Input Script: {total_input_script_len}\n")
             f.write(f"Total Length of Output Script: {total_output_script_len}\n")
             f.write("========\n")
-            f.write("*/\n\n")
-
+            f.write("*/\n")
             for name in sorted_names:
                 res = self.results_data[name]
                 f.write("/*\n")
@@ -201,7 +189,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
         self.test_cases_data = self._load_html_cases()
         self.test_prompts = [tc["prompt"] for tc in self.test_cases_data]
         self.filenames = [tc["name"] for tc in self.test_cases_data]
-
         # Create output folder structure
         # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
         out_folder = Path("out") / self.folder_path
@@ -211,7 +198,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
         self.output_dir = out_folder / timestamp
         # Create the directory structure
         self.output_dir.mkdir(parents=True, exist_ok=True)
-
         # Dictionary to store results for combined output files
         self.results_data = {}
 
@@ -226,12 +212,38 @@ class HtmlCasesLoaded(TestCasesLoaded):
         for html_file in html_files:
             with open(html_file, 'r', encoding='utf-8') as f:
                 html_content = f.read()
-            html_content = self.clean_html(html_content)
+            html_content = self.clean_html(html_content, html_file)
+
+            # Try to read model_info.json from the same folder
+            downloads = 0
+            likes = 0
+            model_info_path = html_file.parent / "model_info.json"
+            if model_info_path.exists():
+                try:
+                    with open(model_info_path, 'r', encoding='utf-8') as f:
+                        model_info = json.load(f)
+                    downloads = model_info.get("Downloads", 0)
+                    likes = model_info.get("Likes", 0)
+                except exception as e:
+                    downloads = 0
+                    likes = 0
+
+            model_page_path = html_file.parent / "model_page.json"
+            if model_page_path.exists():
+                print(rf'skipping {html_file.parent}\{html_file.name}')
+                continue
+
+
             cases.append({
                 "name": html_file.stem,
                 "prompt": f"{self.prompt_content}\n{html_content}\n",
-                "path": html_file
+                "path": html_file,
+                "downloads": downloads,
+                "likes": likes
             })
+
+        # Sort by Downloads + Likes * 200 DESC
+        cases.sort(key=lambda x: x["downloads"] + x["likes"] * 200, reverse=True)
         return cases
 
     def save_test_case_result(self, case_index: int, success: bool, output_text: str,
@@ -247,14 +259,11 @@ class HtmlCasesLoaded(TestCasesLoaded):
             case_data = self.test_cases_data[case_index]
         else:
             case_data = {"name": f"case_{case_index}", "path": None}
-
         basename = case_data.get("name", f"case_{case_index}")
         original_path = case_data.get("path")
-
         # Determine target directory: same folder as the original HTML file
         target_dir = original_path.parent if original_path else self.output_dir
         target_dir.mkdir(parents=True, exist_ok=True)
-
         # 1. Save result as JSON or text
         try:
             if not output_text:
@@ -268,7 +277,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
             file_path = target_dir / f"{basename}.txt"
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(output_text if output_text else "")
-
         # 2. Save log file
         log_file = target_dir / f"{basename}.log"
         log_content = (
@@ -285,7 +293,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
         )
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(log_content)
-
         # Store for potential combined outputs later
         self.results_data[basename] = {
             "log_content": log_content,
@@ -298,7 +305,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
             "original_path": str(original_path)
         }
 
-    def clean_html(self, html_content):
+    def clean_html(self, html_content, html_file):
         """
         Clean HTML content by removing specific tags, attributes, and comments.
         1) Remove <head>, <script>, <svg> tags with their content.
@@ -307,25 +314,23 @@ class HtmlCasesLoaded(TestCasesLoaded):
         """
         original_len = len(html_content)
         soup = BeautifulSoup(html_content, 'html.parser')
-
         # 1) Remove <head>, <script>, <svg> tags and their content
         for tag_name in ['head', 'script', 'svg', 'path', 'defs']:
             for tag in soup.find_all(tag_name):
                 tag.decompose()
-
         # 2) Remove style, class, id, xmlns, rel attributes from all tags
         attrs_to_remove = ['style', 'class', 'id', 'xmlns', 'rel']
         for tag in soup.find_all(True):
             for attr in attrs_to_remove:
                 if tag.has_attr(attr):
                     del tag[attr]
-
         # 3) Remove HTML comments (including malformed ones like <!--[-1-->)
         # BeautifulSoup parses <!-- ... --> as Comment nodes
         for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
             comment.extract()
-
         html_content_stripped = str(soup)
         stripped_len = len(html_content_stripped)
-        print(f"html stripped: {original_len} -> {stripped_len}")
+        print(f"{html_file} stripped: {original_len} -> {stripped_len}")
+        if stripped_len > 240000:
+            print(stripped_len)
         return html_content_stripped
