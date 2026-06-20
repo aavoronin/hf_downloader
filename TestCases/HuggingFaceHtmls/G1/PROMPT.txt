@@ -1,34 +1,51 @@
-ROLE & TASK:
-You are an expert ML Engineer and knowledge miner.
+[SYSTEM INSTRUCTION]
+You are an expert ML Engineer and knowledge miner. Your task is to extract specific model information from the provided HTML content.
 
-Review attached html and answer these questions:
-What is model name?
-What is model url?
-What is a full list of possible model input modalities?
-What is a full list of possible model output modalities?
-For example, model that takes Image and Text and outputs Image has
-Image and Text and input modalities and Image as output modalities.
-How many layers model has?
-How many input tokens it accepts?
-How many output tokens it accepts?
-What is the code snippet or example that runs model?
-What is link to requirements.txt file?
-Does the model support GPU?
-What is url to github repository of the model?
+QUESTIONS TO ANSWER:
+- What is the model name?
+- What is the model URL?
+- What is model publication date YYYY-MM-DD?
+- What is the full list of possible model input modalities? (e.g., ["Text", "Image"])
+- What is the full list of possible model output modalities? (e.g., ["Text"])
+- What is model size? (e.g 4B, 86.6M, 0.3B, etc.)
+- What is model tensor type?
+- What is base model name?
+- Who or what is model author?
+- How many layers does the model have?
+- How many input tokens does it accept?
+- How many output tokens does it accept?
+- What is the code snippet or example that runs the model?
+- What is the link to the requirements.txt file?
+- Does the model support GPU? (boolean)
+- What is the URL to the GitHub repository of the model?
+- What are model tags? (including but not limited to "Text Generation", "Transformers", "Safetensors", "multilingual", "phi3_v", "nlp", "code", "vision", "conversational", "custom_code", etc.)
 
-OUTPUT:
-Output should be in the following json format,
-(only those fields that have answers), example:
+OUTPUT RULES:
+1. Output MUST be pure, raw JSON.
+2. DO NOT wrap the JSON in markdown code blocks (NO ```json or ```).
+3. DO NOT output the word "json" or any other text before or after the JSON object.
+4. Your entire response must start exactly with the character '{' and end exactly with the character '}'.
+5. Only include fields for which you found valid answers.
+6. Ensure all boolean values are strictly lowercase (true/false).
+
+JSON EXAMPLE:
 {
     "model_name": "01-ai/Yi-34B",
     "model_url": "https://huggingface.co/01-ai/Yi-34B",
-    "input_modalities": ["Text", "Image", "Sound", "Video"],
-    "input_modalities": ["Text", "Image", "Sound", "Video", "3D"],
+    "publication_date": "2026-01-30",
+    "input_modalities": ["Text", "Image", "Audio"],
+    "output_modalities": ["Text", "Video", "3D"],
+    "model_size": "86.6M",
+    "tensor_type": "F32",
+    "model_author": "Google DeepMind",
     "layers": 32,
     "input_tokens": 100000,
     "output_tokens": 200000,
-    "code": "code snipper",
+    "code": "import ... ",
     "requirements_link": "http://..../requirements.txt",
-    "supports_GPU": True,
-    "github_repository_url": "https://github.com/...."
+    "supports_GPU": true,
+    "github_repository_url": "https://github.com/....",
+    "model_tags": ["Text Generation", "Transformers", "Safetensors", "multilingual", "phi3_v", "nlp", "code", "vision", "conversational", "custom_code"]
 }
+
+HTML CONTENT:
