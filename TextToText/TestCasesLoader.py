@@ -1,8 +1,10 @@
+import re
 import json
 from pathlib import Path
 from datetime import datetime
 from sys import exception
-from bs4 import BeautifulSoup, Comment
+from bs4 import BeautifulSoup, Comment, NavigableString
+
 
 class TestCasesLoaded:
     BREAK_MARKER = '\n-- BREAK'
@@ -194,6 +196,7 @@ class TestCasesLoaded:
 
 class HtmlCasesLoaded(TestCasesLoaded):
     BREAK_MARKER = '\n-- BREAK'
+    USE_MARKUP_STRIPPING = True
 
     def __init__(self, folder_path: str):
         self.folder_path = Path(folder_path)
@@ -338,11 +341,13 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     print(rf'skipping {html_file.parent}\{html_file.name}')
                     continue
 
-
             with open(html_file, 'r', encoding='utf-8') as f:
                 html_content = f.read()
             original_len = len(html_content)
-            html_content = self.clean_html(html_content, html_file)
+            if HtmlCasesLoaded.USE_MARKUP_STRIPPING:
+                html_content = self.html_to_formatted_text(html_content)
+            else:
+                html_content = self.clean_html(html_content, html_file)
             stripped_len = len(html_content)
 
             print(f"{i:>6} {html_file} stripped: {original_len} -> {stripped_len}")
@@ -484,3 +489,62 @@ class HtmlCasesLoaded(TestCasesLoaded):
         #    print(stripped_len)
 
         return html_content_stripped
+
+
+
+    def html_to_formatted_text(self, html_content: str) -> str:
+        """
+        Strips HTML tags, removes pictures, and retains text with wiki-style
+        formatting for headers and structured tables.
+        """
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # 1. Remove pictures, scripts, and styles (invisible content)
+        for tag in soup.find_all(['img', 'script', 'style', 'noscript', 'svg']):
+            tag.decompose()
+
+        # 2. Remove explicitly hidden elements (e.g., display: none)
+        for tag in soup.find_all(style=re.compile(r'display\s*:\s*none', re.I)):
+            tag.decompose()
+        for tag in soup.find_all(hidden=True):
+            tag.decompose()
+
+        # 3. Convert Tables to marked text format
+        # We process tables and format them with pipes for clear readability
+        for table in soup.find_all('table'):
+            rows = []
+            for tr in table.find_all('tr'):
+                # Extract text from th and td, replace internal pipes to avoid breaking the format
+                cells = [
+                    td.get_text(separator=' ', strip=True).replace('|', '/')
+                    for td in tr.find_all(['th', 'td'])
+                ]
+                if cells:
+                    rows.append("| " + " | ".join(cells) + " |")
+
+            table_text = "\n".join(rows)
+            # Replace the HTML table with our formatted text block
+            table.replace_with(NavigableString(f"\n[Table Start]\n{table_text}\n[Table End]\n"))
+
+        # 4. Convert Headers (h1-h6) to Wiki format (= Title =, == Subtitle ==)
+        for i in range(1, 7):
+            for header in soup.find_all(f'h{i}'):
+                marker = '=' * i
+                text = header.get_text(strip=True)
+                # Add newlines to ensure the header sits on its own line
+                header.replace_with(NavigableString(f"\n{marker} {text} {marker}\n"))
+
+        # 5. Format Lists (optional but keeps structure)
+        for li in soup.find_all('li'):
+            li.insert(0, NavigableString("* "))
+
+        # 6. Extract all visible text
+        # separator='\n' ensures block elements (like <p> and <div>) don't mash together
+        text = soup.get_text(separator='\n')
+
+        # 7. Clean up excessive blank lines
+        text = re.sub(r'\n{3,}', '\n\n', text)
+
+        return text.strip()
+
+
