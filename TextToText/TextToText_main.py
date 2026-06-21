@@ -125,3 +125,24 @@ def apply_models_to_htmls(manager: TextToTextModelFactory,
     stats = {'test_type': 'text_to_sql_prompt', 'results': results}
     manager.save_statistics(stats)
     print(f"\n💾 Statistics saved to {manager.stats_path}")
+
+def collect_models_htmls_info(
+        manager: TextToTextModelFactory,
+        models: list[TextToTextModelInfo],
+        test_cases_loader: TestCasesLoaded):
+    print(f"\n🚀 Starting text generation ...")
+    results = []
+    num_cases = len(test_cases_loader.get_test_prompts())
+
+    for model_info in models:
+        model_name = model_info.name
+        if model_name not in ALLOWED_MODELS:
+            continue
+        if manager.is_model_faulty(model_name):
+            print(f"⊘ {model_name}: SKIPPED (error limit exceeded)")
+            continue
+
+        miner= KnowledgeMiner(manager, model_info, test_cases_loader)
+        result = miner.run()
+        results.append(result)
+

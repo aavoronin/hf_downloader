@@ -599,10 +599,29 @@ class TextToTextModel:
     def _load_pipeline(self):
         if self._pipeline is not None or self._custom_objects is not None:
             return
-        print(f"   [Pipeline] Loading for {self.model_name}...")
+
+        # ==========================================
+        # RTX 5070 Ti GPU Selection Logic
+        # ==========================================
+        # CHANGE THIS: Set to 0 if 5070 Ti is the first card in `nvidia-smi`,
+        # or 1 if it is the second card.
+        TARGET_GPU_INDEX = 1
+
+        # Determine the specific device string for PyTorch (e.g., "cuda:1")
+        target_device = f"cuda:{TARGET_GPU_INDEX}" if self._device == "cuda" else self._device
+        device_arg = TARGET_GPU_INDEX if self._device == "cuda" else -1
+
+        if self._device == "cuda":
+            # Force PyTorch to set this GPU as the default for any implicit allocations
+            torch.cuda.set_device(TARGET_GPU_INDEX)
+        # ==========================================
+
+        print(f"   [Pipeline] Loading for {self.model_name} on {target_device}...")
         try:
             if self._custom_config:
                 print("   [Pipeline] Using custom initialization...")
+                # Note: We pass self._device ("cuda") here because custom loaders
+                # (like llama-cpp) handle specific GPU indexing internally via tensor_split.
                 self._custom_objects = self._custom_config["init_fn"](
                     str(self.model_path), self._device
                 )
@@ -627,18 +646,20 @@ class TextToTextModel:
                 tokenizer.pad_token = tokenizer.eos_token
 
             model_dtype = torch.float16 if self._device == "cuda" else torch.float32
+
+            # Load the model explicitly onto the targeted GPU (e.g., "cuda:1")
             model = AutoModelForCausalLM.from_pretrained(
                 str(self.model_path), local_files_only=True,
                 torch_dtype=model_dtype, low_cpu_mem_usage=True,
                 trust_remote_code=True
-            ).to(self._device)
+            ).to(target_device)
 
-            device_arg = 0 if self._device == "cuda" else -1
+            # Pass the specific integer index to the pipeline
             self._pipeline = pipeline(
                 "text-generation", model=model, tokenizer=tokenizer,
                 device=device_arg
             )
-            print("   [Pipeline] ✓ Pipeline ready")
+            print(f"   [Pipeline] ✓ Pipeline ready on {target_device}")
 
         except ImportError as e:
             if "cannot import name" in str(e) or "initialization" in str(e):

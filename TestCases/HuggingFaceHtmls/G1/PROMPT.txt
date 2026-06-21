@@ -25,7 +25,7 @@ OUTPUT RULES:
 2. DO NOT wrap the JSON in markdown code blocks (NO ```json or ```).
 3. DO NOT output the word "json" or any other text before or after the JSON object.
 4. Your entire response must start exactly with the character '{' and end exactly with the character '}'.
-5. Only include fields for which you found valid answers.
+5. STRICTLY OMIT MISSING DATA: Only include a key if you found a direct, explicit answer in the HTML. If the information is missing, unknown, or not explicitly stated, DO NOT include that key in the JSON output at all. NEVER use placeholder text like "Not explicitly provided", "Not found", "Unknown", "N/A", or explanatory sentences as a value. If you don't know it, drop the key entirely.
 6. Ensure all boolean values are strictly lowercase (true/false).
 
 JSON EXAMPLE:
