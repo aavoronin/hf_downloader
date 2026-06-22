@@ -1,3 +1,4 @@
+import time
 import requests
 from bs4 import BeautifulSoup, NavigableString, Comment
 import pandas as pd
@@ -6,6 +7,7 @@ import re
 
 class HFModelLister:
     MAX_PAGES = 5  # Maximum pages to fetch per URL
+
     def __init__(self, base_url, token=None):
         self.print_html = False
         self.base_url = base_url
@@ -22,9 +24,11 @@ class HFModelLister:
         text = str(text).replace(",", "").strip()
         if not text:
             return 0
+
         # Filter out years (1990-2099)
         if text.isdigit() and 1990 <= int(text) <= 2099:
             return 0
+
         try:
             if text.lower().endswith("k"):
                 return int(float(text[:-1]) * 1_000)
@@ -34,6 +38,7 @@ class HFModelLister:
                 return int(float(text[:-1]) * 1_000_000_000)
             elif text.isdigit():
                 return int(text)
+
             # Try extracting leading numeric part
             match = re.match(r'^([\d.]+)', text)
             if match:
@@ -63,7 +68,6 @@ class HFModelLister:
             # Filter out numbers, dates, and "Updated" label
             if purpose and not re.match(r'^[\d.]+[kKmMbB]?$', purpose) and purpose.lower() not in ['updated', '']:
                 return purpose
-
         return ""
 
     def _extract_metric_after_svg(self, container, path_startswith):
@@ -89,8 +93,7 @@ class HFModelLister:
     def parse_page(self, url):
         resp = self.session.get(url)
         if resp.status_code != 200:
-            print(f"Failed to load {url}, status {resp.status_code}")
-            return False
+            raise Exception(f"Failed to load {url}, status {resp.status_code}")
 
         soup = BeautifulSoup(resp.text, "html.parser")
         model_cards = soup.select("a.flex.items-center.justify-between")
@@ -118,7 +121,6 @@ class HFModelLister:
 
                 # Downloads & Likes: target specific SVG icons
                 downloads = likes = 0
-
                 if metrics_div:
                     # Download icon: path starts with "M26 24v4H6v-4"
                     dl_text = self._extract_metric_after_svg(metrics_div, "M26 24v4H6v-4")
@@ -144,7 +146,18 @@ class HFModelLister:
         while page < self.MAX_PAGES:  # Use constant instead of hardcoded 20
             url = self.base_url if page == 0 else f"{self.base_url}&p={page}"
             print(f"Fetching page {page} -> {url}")
-            has_results = self.parse_page(url)
+
+            has_results = False
+            for attempt in range(10):
+                try:
+                    has_results = self.parse_page(url)
+                    break
+                except Exception as e:
+                    wait_time = 50 + attempt * 50
+                    print(f"⚠ Attempt {attempt + 1} failed: {e}. "
+                          f"Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+
             if not has_results:
                 break
             page += 1
@@ -153,6 +166,7 @@ class HFModelLister:
         if not self.results:
             print("No results collected")
             return
+
         df = pd.DataFrame(self.results)
         pd.set_option('display.max_columns', None)
         pd.set_option('display.max_colwidth', 300)
