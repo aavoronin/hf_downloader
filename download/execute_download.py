@@ -24,18 +24,26 @@ def execute_download():
         lister.show_results()
     """
 
-    """
     start_urls = [
-        "https://huggingface.co/models?sort=likes"
+        "https://huggingface.co/models?sort=likes",
+        "https://huggingface.co/models?sort=downloads",
+        #"https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads",
+        #"https://huggingface.co/models?pipeline_tag=document-question-answering&sort=downloads",
+        #"https://huggingface.co/models?pipeline_tag=object-detection&sort=downloads",
+        #"https://huggingface.co/models?pipeline_tag=text-to-3d&sort=downloads",
+        #"https://huggingface.co/models?pipeline_tag=image-to-3d&sort=downloads",
+        #"https://huggingface.co/models?pipeline_tag=image-feature-extraction&sort=downloads",
+        #"https://huggingface.co/models?pipeline_tag=video-to-video&sort=downloads",
 
     ]
     root_folder = r"D:\AIs\Info"
-    HFModelLister.MAX_PAGES = 20
+    HFModelLister.MAX_PAGES = 50
     for start_url in start_urls:
         for _ in range(1):
             download_models_info(root_folder,
                 start_urls=[start_url], first_only = False)
     return
+    """
     """
 
     start_urls = [

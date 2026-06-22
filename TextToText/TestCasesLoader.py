@@ -312,6 +312,9 @@ class HtmlCasesLoaded(TestCasesLoaded):
             output_mods = data.get("output_modalities")
             output_modalities = ",".join(str(m) for m in output_mods) if isinstance(output_mods, list) else ""
 
+            if row_num == 1:
+                print('row_num,file,model_name,input_modalities,output_modalities,model_size')
+
             # Print the formatted row with properly escaped symbols for CSV
             print(f'{row_num},"{escape_csv(file_path)}","{escape_csv(model_name)}",'
                   f'"{escape_csv(input_modalities)}","{escape_csv(output_modalities)}","{escape_csv(model_size)}"')
@@ -334,12 +337,19 @@ class HtmlCasesLoaded(TestCasesLoaded):
         for i, html_file in enumerate(html_files):
             model_page_path = html_file.parent / "model_page.json"
             if model_page_path.exists():
-                target_date = datetime(2026, 6, 20, 14, 0, 0)
-                last_modified_time = datetime.fromtimestamp(Path(model_page_path).stat().st_mtime)
-                is_older = last_modified_time < target_date
-                if not is_older:
-                    print(rf'skipping {html_file.parent}\{html_file.name}')
-                    continue
+                try:
+                    target_date = datetime(2026, 6, 20, 14, 0, 0)
+                    last_modified_time = datetime.fromtimestamp(Path(model_page_path).stat().st_mtime)
+                    is_older = last_modified_time < target_date
+                    if not is_older:
+                        with open(model_page_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            if "model_name" in data:
+                                print(rf'skipping {html_file.parent}\{html_file.name}')
+                                continue
+
+                except Exception as e:
+                    print(e)
 
             with open(html_file, 'r', encoding='utf-8') as f:
                 html_content = f.read()
@@ -378,8 +388,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
             })
 
         # Sort by Downloads + Likes * 200 DESC
-        #cases.sort(key=lambda x: x["downloads"] + x["likes"] * 200, reverse=True)
-        cases.sort(key=lambda x: len(x["prompt"]))
+        cases.sort(key=lambda x: x["downloads"] + x["likes"] * 200, reverse=True)
+        #cases.sort(key=lambda x: len(x["prompt"]))
         return cases
 
     def save_test_case_result(self, case_index: int, success: bool, output_text: str,

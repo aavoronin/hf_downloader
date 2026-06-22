@@ -249,11 +249,11 @@ class MultipleModelsDownloader:
 
             safe_name = model_id.replace("/", "_")
             model_folder = self.root_folder / safe_name
-            mhtml_path = model_folder / "model_page.html"
+            html_path = model_folder / "model_page.html"
 
-            #if mhtml_path.exists():
-            #    print(f"✓ {model_id}: model_page.mhtml already exists")
-            #    continue
+            if html_path.exists():
+                print(f"✓ {model_id}: model_page.html already exists")
+                continue
 
             url = f"https://huggingface.co/{model_id}"
             print(f"↓ Downloading page for {model_id}...")
@@ -270,15 +270,15 @@ class MultipleModelsDownloader:
 
                     response.raise_for_status()
 
-                    with open(mhtml_path, 'w', encoding='utf-8') as f:
+                    with open(html_path, 'w', encoding='utf-8') as f:
                         f.write(response.text)
 
                     print(url)
-                    print(f"✓ Saved: {mhtml_path}")
+                    print(f"✓ Saved: {html_path}")
                     break
                 except Exception as e:
                     if attempt < max_retries:
-                        wait_time = 20 + attempt * 10
+                        wait_time = 50 + attempt * 50
                         print(f"⚠ Attempt {attempt + 1} failed: {e}. "
                               f"Retrying in {wait_time}s...")
                         time.sleep(wait_time)
