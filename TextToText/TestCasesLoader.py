@@ -288,14 +288,24 @@ class HtmlCasesLoaded(TestCasesLoaded):
             """Replaces internal double quotes with two double quotes."""
             return str(val).replace('"', '""')
 
+        def get_int_token(val):
+            """Safely convert a value to an integer string, or return empty string."""
+            if val is None:
+                return ""
+            try:
+                return str(int(val))
+            except (ValueError, TypeError):
+                return ""
+
         for row_num, item in enumerate(existing_data, start=1):
             file_path = item.get("file_path", "Unknown Path")
 
             # If an error occurred during parsing/reading, print the error and skip to next
             if "error" in item:
                 err_msg = escape_csv(item['error'])
-                # Kept the same 6-column structure so CSV parsers don't break on error rows
-                print(f'{row_num},"{escape_csv(file_path)}","ERROR","{err_msg}","",""')
+                # Pad with 14 empty columns to maintain the 18-column CSV structure
+                empty_cols = ",".join(['""'] * 14)
+                print(f'{row_num},"{escape_csv(file_path)}","ERROR","{err_msg}",{empty_cols}')
                 continue
 
             # Extract JSON data
@@ -305,19 +315,42 @@ class HtmlCasesLoaded(TestCasesLoaded):
             model_name = str(data["model_name"]) if data.get("model_name") is not None else ""
             model_size = str(data["model_size"]) if data.get("model_size") is not None else ""
 
-            # Format modalities as comma-separated strings (e.g., "Text,Image,Audio")
-            input_mods = data.get("input_modalities")
-            input_modalities = ",".join(str(m) for m in input_mods) if isinstance(input_mods, list) else ""
+            # Format modalities as comma-separated strings
+            input_mods = data.get("input_modalities") or []
+            output_mods = data.get("output_modalities") or []
 
-            output_mods = data.get("output_modalities")
+            input_modalities = ",".join(str(m) for m in input_mods) if isinstance(input_mods, list) else ""
             output_modalities = ",".join(str(m) for m in output_mods) if isinstance(output_mods, list) else ""
 
+            # Modality flags for Input
+            text_i = "1" if "Text" in input_mods else ""
+            image_i = "1" if "Image" in input_mods else ""
+            audio_i = "1" if "Audio" in input_mods else ""
+            video_i = "1" if "Video" in input_mods else ""
+
+            # Modality flags for Output
+            text_o = "1" if "Text" in output_mods else ""
+            image_o = "1" if "Image" in output_mods else ""
+            audio_o = "1" if "Audio" in output_mods else ""
+            video_o = "1" if "Video" in output_mods else ""
+            three_d_o = "1" if "3D" in output_mods else ""
+
+            # Token counts
+            input_tokens = get_int_token(data.get("input_tokens"))
+            output_tokens = get_int_token(data.get("output_tokens"))
+
+            # Model URL
+            model_url = f"https://huggingface.co/{escape_csv(model_name)}" if model_name else ""
+
             if row_num == 1:
-                print('row_num,file,model_name,input_modalities,output_modalities,model_size')
+                print(
+                    'row_num,file_path,model_url,model_name,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens')
 
             # Print the formatted row with properly escaped symbols for CSV
-            print(f'{row_num},"{escape_csv(file_path)}","{escape_csv(model_name)}",'
-                  f'"{escape_csv(input_modalities)}","{escape_csv(output_modalities)}","{escape_csv(model_size)}"')
+            print(f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_name)}",'
+                  f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",'
+                  f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",'
+                  f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}"')
 
         print("=" * 120)
         print("Processing complete.")

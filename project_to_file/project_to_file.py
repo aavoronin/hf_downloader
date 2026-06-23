@@ -56,6 +56,7 @@ CODING STANDARDS:
 6. Do NOT add "change log", "modified", or "TODO" comments. Comments must only explain logic, behavior, or business rules.
 7. Update imports, dependencies, or configuration if required by the changes.
 8. If requirements are ambiguous or conflicting, pause and ask for clarification instead of guessing.
+9. Do not add or delete empty lines in the places where code was not changed. 
 
 """
 def concatenate_project_files(project_path, output_filename='combined_output.txt'):

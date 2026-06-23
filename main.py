@@ -15,7 +15,7 @@ from project_to_file.project_to_file import project_to_file_main
 
 if __name__ == "__main__":
     project_to_file_main()
-    execute_download()
+    #execute_download()
     TextToText_main()
     #download_alice()
     # parse_alice()
