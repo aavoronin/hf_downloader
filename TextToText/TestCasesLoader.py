@@ -232,6 +232,23 @@ class HtmlCasesLoaded(TestCasesLoaded):
             if not model_page_path.exists():
                 continue
 
+            # --- NEW LOGIC: Load model_info.json if it exists ---
+            model_info_path = html_file.parent / "model_info.json"
+            model_id = ""
+            downloads = 0
+            likes = 0
+
+            if model_info_path.exists():
+                try:
+                    with open(model_info_path, 'r', encoding='utf-8') as f:
+                        info_data = json.load(f)
+                    model_id = info_data.get("Model ID", "") or ""
+                    downloads = info_data.get("Downloads", 0) or 0
+                    likes = info_data.get("Likes", 0) or 0
+                except Exception:
+                    pass
+            # ----------------------------------------------------
+
             try:
                 # 1. Attempt to read and parse the JSON file
                 with open(model_page_path, 'r', encoding='utf-8') as f:
@@ -240,7 +257,12 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 # Append the parsed data with its file path
                 existing_data.append({
                     "file_path": str(model_page_path),
-                    "json": data
+                    "json": data,
+                    "model_info": {
+                        "model_id": model_id,
+                        "downloads": downloads,
+                        "likes": likes
+                    }
                 })
 
             except json.JSONDecodeError as e:
@@ -260,13 +282,23 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     existing_data.append({
                         "file_path": str(model_page_path),
                         "error": f"Invalid JSON: {str(e)}",
-                        "raw_content": raw_text
+                        "raw_content": raw_text,
+                        "model_info": {
+                            "model_id": model_id,
+                            "downloads": downloads,
+                            "likes": likes
+                        }
                     })
                 except Exception as read_err:
                     print(f"Critical Error: Could not read {model_page_path} as text. {read_err}")
                     existing_data.append({
                         "file_path": str(model_page_path),
                         "error": f"Read Error: {str(read_err)}",
+                        "model_info": {
+                            "model_id": model_id,
+                            "downloads": downloads,
+                            "likes": likes
+                        }
                     })
 
             except Exception as e:
@@ -275,6 +307,11 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 existing_data.append({
                     "file_path": str(model_page_path),
                     "error": f"Unexpected Error: {str(e)}",
+                    "model_info": {
+                        "model_id": model_id,
+                        "downloads": downloads,
+                        "likes": likes
+                    }
                 })
 
         # ==========================================
@@ -299,13 +336,23 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         for row_num, item in enumerate(existing_data, start=1):
             file_path = item.get("file_path", "Unknown Path")
+            model_info_data = item.get("model_info", {})
+
+            # Extract model_id, downloads, and likes from the loaded model_info
+            model_id = model_info_data.get("model_id", "") or ""
+            downloads = model_info_data.get("downloads", 0) or 0
+            likes = model_info_data.get("likes", 0) or 0
+
+            # Use model_id to construct the URL
+            model_url = f"https://huggingface.co/{escape_csv(model_id)}" if model_id else ""
 
             # If an error occurred during parsing/reading, print the error and skip to next
             if "error" in item:
                 err_msg = escape_csv(item['error'])
-                # Pad with 14 empty columns to maintain the 18-column CSV structure
-                empty_cols = ",".join(['""'] * 14)
-                print(f'{row_num},"{escape_csv(file_path)}","ERROR","{err_msg}",{empty_cols}')
+                # Pad with 12 empty columns to maintain the 20-column CSV structure
+                empty_cols = ",".join(['""'] * 12)
+                print(
+                    f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","ERROR","{err_msg}",{empty_cols},{downloads},{likes}')
                 continue
 
             # Extract JSON data
@@ -339,18 +386,15 @@ class HtmlCasesLoaded(TestCasesLoaded):
             input_tokens = get_int_token(data.get("input_tokens"))
             output_tokens = get_int_token(data.get("output_tokens"))
 
-            # Model URL
-            model_url = f"https://huggingface.co/{escape_csv(model_name)}" if model_name else ""
-
             if row_num == 1:
                 print(
-                    'row_num,file_path,model_url,model_name,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens')
+                    'row_num,file_path,model_url,model_id,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes')
 
             # Print the formatted row with properly escaped symbols for CSV
-            print(f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_name)}",'
+            print(f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}",'
                   f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",'
                   f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",'
-                  f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}"')
+                  f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes}')
 
         print("=" * 120)
         print("Processing complete.")
@@ -369,6 +413,10 @@ class HtmlCasesLoaded(TestCasesLoaded):
         cases = []
         for i, html_file in enumerate(html_files):
             model_page_path = html_file.parent / "model_page.json"
+            model_page_path_txt = html_file.parent / "model_page.txt"
+            if model_page_path_txt.exists():
+                print(rf'skipping {html_file.parent}\{html_file.name} (previous error)')
+                continue
             if model_page_path.exists():
                 try:
                     target_date = datetime(2026, 6, 20, 14, 0, 0)
