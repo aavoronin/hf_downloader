@@ -25,19 +25,22 @@ def execute_download():
     """
 
     start_urls = [
-        "https://huggingface.co/models?sort=likes",
-        "https://huggingface.co/models?sort=downloads",
-        #"https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads",
-        #"https://huggingface.co/models?pipeline_tag=document-question-answering&sort=downloads",
-        #"https://huggingface.co/models?pipeline_tag=object-detection&sort=downloads",
-        #"https://huggingface.co/models?pipeline_tag=text-to-3d&sort=downloads",
-        #"https://huggingface.co/models?pipeline_tag=image-to-3d&sort=downloads",
-        #"https://huggingface.co/models?pipeline_tag=image-feature-extraction&sort=downloads",
-        #"https://huggingface.co/models?pipeline_tag=video-to-video&sort=downloads",
+        #"https://huggingface.co/models?sort=likes",
+        #"https://huggingface.co/models?sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=document-question-answering&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=object-detection&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=text-to-3d&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=image-to-3d&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=image-feature-extraction&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=video-to-video&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=video-text-to-text&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=mask-generation&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=text-to-speech&sort=downloads",
 
     ]
     root_folder = r"D:\AIs\Info"
-    HFModelLister.MAX_PAGES = 50
+    HFModelLister.MAX_PAGES = 10
     for start_url in start_urls:
         for _ in range(1):
             download_models_info(root_folder,
@@ -136,6 +139,7 @@ def download_models_info(root_folder: str,
                                           exclude=exclude)
     downloader.process_urls()
     downloader.download_model_pages()
+
 
 
 def download_certain_type_of_models(root_folder: str,

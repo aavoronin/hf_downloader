@@ -250,41 +250,47 @@ class MultipleModelsDownloader:
             safe_name = model_id.replace("/", "_")
             model_folder = self.root_folder / safe_name
             html_path = model_folder / "model_page.html"
+            html_files_page_path = model_folder / "model_files_page.html"
 
-            if html_path.exists():
-                print(f"✓ {model_id}: model_page.html already exists")
+            if html_path.exists() and html_files_page_path.exists():
+                print(f"✓ {model_id}: model_page.html and model_files_page.html already exists")
                 continue
 
-            url = f"https://huggingface.co/{model_id}"
-            print(f"↓ Downloading page for {model_id}...")
+            urls = []
+            if not html_path.exists():
+                urls.append((f"https://huggingface.co/{model_id}", html_path) )
+            if not html_files_page_path.exists():
+                urls.append((f"https://huggingface.co/{model_id}/tree/main", html_files_page_path))
+            for url, file_path in urls:
+                print(f"↓ Downloading page for {model_id}...")
 
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            max_retries = 10
-            for attempt in range(max_retries + 1):
-                try:
-                    # Reuse session from lister if available to keep auth cookies
-                    if self.lister and hasattr(self.lister, 'session'):
-                        response = self.lister.session.get(url, timeout=30)
-                    else:
-                        response = requests.get(url, headers=headers, timeout=30)
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                max_retries = 10
+                for attempt in range(max_retries + 1):
+                    try:
+                        # Reuse session from lister if available to keep auth cookies
+                        if self.lister and hasattr(self.lister, 'session'):
+                            response = self.lister.session.get(url, timeout=30)
+                        else:
+                            response = requests.get(url, headers=headers, timeout=30)
 
-                    response.raise_for_status()
+                        response.raise_for_status()
 
-                    with open(html_path, 'w', encoding='utf-8') as f:
-                        f.write(response.text)
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            f.write(response.text)
 
-                    print(url)
-                    print(f"✓ Saved: {html_path}")
-                    break
-                except Exception as e:
-                    if attempt < max_retries:
-                        wait_time = 50 + attempt * 50
-                        print(f"⚠ Attempt {attempt + 1} failed: {e}. "
-                              f"Retrying in {wait_time}s...")
-                        time.sleep(wait_time)
-                    else:
-                        print(f"✗ Failed to download page for {model_id} "
-                              f"after {max_retries} retries: {e}")
+                        print(url)
+                        print(f"✓ Saved: {file_path}")
+                        break
+                    except Exception as e:
+                        if attempt < max_retries:
+                            wait_time = 50 + attempt * 50
+                            print(f"⚠ Attempt {attempt + 1} failed: {e}. "
+                                  f"Retrying in {wait_time}s...")
+                            time.sleep(wait_time)
+                        else:
+                            print(f"✗ Failed to download page {file_path} "
+                                  f"after {max_retries} retries: {e}")
 
     def show_results(self):
         if self.lister is not None:
@@ -450,3 +456,6 @@ class MultipleModelsDownloader:
                 except (FileNotFoundError, PermissionError):
                     size_str = "N/A"
                 print(f"   ├── {rel_path} ({size_str})")
+
+    def download_model_files_info(self):
+        pass

@@ -495,15 +495,15 @@ class HtmlCasesLoaded(TestCasesLoaded):
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # 1. Save result as JSON or text
+        file_path = target_dir / f"{basename}.json"
         try:
             if not output_text:
                 raise ValueError("Empty output text")
             parsed_data = json.loads(output_text)
-            file_path = target_dir / f"{basename}.json"
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(parsed_data, f, indent=2, ensure_ascii=False)
         except (json.JSONDecodeError, TypeError, ValueError) as e:
-            print(f"⚠ JSON validation failed for {basename}: {e}. Saving as text.")
+            print(f"⚠ JSON validation failed for {file_path}: {e}. Saving as text.")
             file_path = target_dir / f"{basename}.txt"
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(output_text if output_text else "")
