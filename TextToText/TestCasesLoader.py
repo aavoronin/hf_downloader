@@ -249,6 +249,57 @@ class HtmlCasesLoaded(TestCasesLoaded):
         }
         return int(value * multipliers.get(unit, 1))
 
+    def _get_model_files_info(self, folder_path: Path) -> tuple[str, str]:
+        """
+        Load or parse model_files_page to extract Size and SizeB.
+        Checks for model_files_page.json first. If not found, parses
+        model_files_page.html and saves the result to JSON.
+        Returns a tuple of (size_str, size_bytes_str).
+        """
+        json_path = folder_path / "model_files_page.json"
+        html_path = folder_path / "model_files_page.html"
+
+        size_str = ""
+        size_bytes_str = ""
+
+        if json_path.exists():
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                size_str = data.get("Size", "")
+                size_bytes_str = data.get("SizeB", "")
+                return size_str, size_bytes_str
+            except Exception:
+                pass
+
+        if html_path.exists():
+            try:
+                with open(html_path, 'r', encoding='utf-8') as f:
+                    files_html_content = f.read()
+
+                soup_files = BeautifulSoup(files_html_content, 'html.parser')
+                # Find the specific div containing the size based on unique Tailwind classes
+                target_div = soup_files.find(
+                    'div',
+                    class_=lambda c: c and 'py-[3px]' in c and 'font-mono' in c and 'text-gray-500' in c
+                )
+
+                if target_div:
+                    size_str = target_div.get_text(strip=True)
+                    size_bytes = self._parse_size_to_bytes(size_str)
+                    size_bytes_str = str(size_bytes)
+
+                    # Save to json for next time
+                    try:
+                        with open(json_path, 'w', encoding='utf-8') as f:
+                            json.dump({"Size": size_str, "SizeB": size_bytes_str}, f, indent=2, ensure_ascii=False)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        return size_str, size_bytes_str
+
     def _collect_existing_results(self):
         html_files = self.collect_case_files()
         if not html_files:
@@ -277,29 +328,9 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 except Exception:
                     pass
 
-            # --- Load model_files_page.html to extract size ---
-            size_str = ""
-            size_bytes_str = ""
-            model_files_page_path = html_file.parent / "model_files_page.html"
-            if model_files_page_path.exists():
-                try:
-                    with open(model_files_page_path, 'r', encoding='utf-8') as f:
-                        files_html_content = f.read()
-
-                    soup_files = BeautifulSoup(files_html_content, 'html.parser')
-                    # Find the specific div containing the size based on unique Tailwind classes
-                    target_div = soup_files.find(
-                        'div',
-                        class_=lambda c: c and 'py-[3px]' in c and 'font-mono' in c and 'text-gray-500' in c
-                    )
-
-                    if target_div:
-                        size_str = target_div.get_text(strip=True)
-                        size_bytes = self._parse_size_to_bytes(size_str)
-                        size_bytes_str = str(size_bytes)
-                except Exception:
-                    pass
-            # ----------------------------------------------------
+            # --- Load model_files_page info (Size and SizeB) ---
+            size_str, size_bytes_str = self._get_model_files_info(html_file.parent)
+            # ---------------------------------------------------
 
             try:
                 # 1. Attempt to read and parse the JSON file
