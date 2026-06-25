@@ -203,8 +203,11 @@ class HtmlCasesLoaded(TestCasesLoaded):
     BREAK_MARKER = '\n-- BREAK'
     USE_MARKUP_STRIPPING = True
 
-    def __init__(self, folder_path: str):
+    def __init__(self, folder_path: str, output_folder: str = r"D:\AIs\Info"):
         self.folder_path = Path(folder_path)
+        self.output_folder = Path(output_folder)
+        self.output_folder.mkdir(parents=True, exist_ok=True)
+
         self.test_cases_data = self._collect_existing_results()
         self.prompt_content = self._load_prompt()
         self.test_cases_data = self._load_html_cases()
@@ -402,93 +405,103 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 })
 
         # ==========================================
-        # FINAL LOOP: Print Summary as CSV
+        # FINAL LOOP: Print Summary as CSV & Save to File
         # ==========================================
         print(f"\nTotal records loaded: {len(existing_data)}")
         print("=" * 120)
 
-        # Helper function to properly escape double quotes for CSV format
-        def escape_csv(val):
-            """Replaces internal double quotes with two double quotes."""
-            return str(val).replace('"', '""')
+        csv_file_path = self.output_folder / "models_summary.csv"
+        with open(csv_file_path, 'w', encoding='utf-8') as csv_file:
+            # Helper function to properly escape double quotes for CSV format
+            def escape_csv(val):
+                """Replaces internal double quotes with two double quotes."""
+                return str(val).replace('"', '""')
 
-        def get_int_token(val):
-            """Safely convert a value to an integer string, or return empty string."""
-            if val is None:
-                return ""
-            try:
-                return str(int(val))
-            except (ValueError, TypeError):
-                return ""
+            def get_int_token(val):
+                """Safely convert a value to an integer string, or return empty string."""
+                if val is None:
+                    return ""
+                try:
+                    return str(int(val))
+                except (ValueError, TypeError):
+                    return ""
 
-        for row_num, item in enumerate(existing_data, start=1):
-            file_path = item.get("file_path", "Unknown Path")
-            model_info_data = item.get("model_info", {})
+            header = 'row_num,file_path,model_url,model_id,Size,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes,SizeB'
 
-            # Extract newly added size fields
-            size_str = item.get("size_str", "")
-            size_bytes_str = item.get("size_bytes_str", "")
+            for row_num, item in enumerate(existing_data, start=1):
+                file_path = item.get("file_path", "Unknown Path")
+                model_info_data = item.get("model_info", {})
 
-            # Extract model_id, downloads, and likes from the loaded model_info
-            model_id = model_info_data.get("model_id", "") or ""
-            downloads = model_info_data.get("downloads", 0) or 0
-            likes = model_info_data.get("likes", 0) or 0
+                # Extract newly added size fields
+                size_str = item.get("size_str", "")
+                size_bytes_str = item.get("size_bytes_str", "")
 
-            # Use model_id to construct the URL
-            model_url = f"https://huggingface.co/{escape_csv(model_id)}" if model_id else ""
+                # Extract model_id, downloads, and likes from the loaded model_info
+                model_id = model_info_data.get("model_id", "") or ""
+                downloads = model_info_data.get("downloads", 0) or 0
+                likes = model_info_data.get("likes", 0) or 0
 
-            # If an error occurred during parsing/reading, print the error and skip to next
-            if "error" in item:
-                err_msg = escape_csv(item['error'])
-                # Pad with 12 empty columns to maintain the 22-column CSV structure
-                empty_cols = ",".join(['""'] * 12)
-                print(
-                    f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}","ERROR","{err_msg}",{empty_cols},{downloads},{likes},{size_bytes_str}')
-                continue
+                # Use model_id to construct the URL
+                model_url = f"https://huggingface.co/{escape_csv(model_id)}" if model_id else ""
 
-            # Extract JSON data
-            data = item.get("json", {})
+                # If an error occurred during parsing/reading, print the error and skip to next
+                if "error" in item:
+                    err_msg = escape_csv(item['error'])
+                    # Pad with 12 empty columns to maintain the 22-column CSV structure
+                    empty_cols = ",".join(['""'] * 12)
+                    row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}","ERROR","{err_msg}",{empty_cols},{downloads},{likes},{size_bytes_str}'
 
-            # Extract fields, defaulting to empty string if missing or null (None)
-            model_name = str(data["model_name"]) if data.get("model_name") is not None else ""
-            model_size = str(data["model_size"]) if data.get("model_size") is not None else ""
+                    if row_num == 1:
+                        print(header)
+                        csv_file.write(header + '\n')
+                    print(row)
+                    csv_file.write(row + '\n')
+                    continue
 
-            # Format modalities as comma-separated strings
-            input_mods = data.get("input_modalities") or []
-            output_mods = data.get("output_modalities") or []
-            input_modalities = ",".join(str(m) for m in input_mods) if isinstance(input_mods, list) else ""
-            output_modalities = ",".join(str(m) for m in output_mods) if isinstance(output_mods, list) else ""
+                # Extract JSON data
+                data = item.get("json", {})
 
-            # Modality flags for Input
-            text_i = "1" if "Text" in input_mods else ""
-            image_i = "1" if "Image" in input_mods else ""
-            audio_i = "1" if "Audio" in input_mods else ""
-            video_i = "1" if "Video" in input_mods else ""
+                # Extract fields, defaulting to empty string if missing or null (None)
+                model_name = str(data["model_name"]) if data.get("model_name") is not None else ""
+                model_size = str(data["model_size"]) if data.get("model_size") is not None else ""
 
-            # Modality flags for Output
-            text_o = "1" if "Text" in output_mods else ""
-            image_o = "1" if "Image" in output_mods else ""
-            audio_o = "1" if "Audio" in output_mods else ""
-            video_o = "1" if "Video" in output_mods else ""
-            three_d_o = "1" if "3D" in output_mods else ""
+                # Format modalities as comma-separated strings
+                input_mods = data.get("input_modalities") or []
+                output_mods = data.get("output_modalities") or []
+                input_modalities = ",".join(str(m) for m in input_mods) if isinstance(input_mods, list) else ""
+                output_modalities = ",".join(str(m) for m in output_mods) if isinstance(output_mods, list) else ""
 
-            # Token counts
-            input_tokens = get_int_token(data.get("input_tokens"))
-            output_tokens = get_int_token(data.get("output_tokens"))
+                # Modality flags for Input
+                text_i = "1" if "Text" in input_mods else ""
+                image_i = "1" if "Image" in input_mods else ""
+                audio_i = "1" if "Audio" in input_mods else ""
+                video_i = "1" if "Video" in input_mods else ""
 
-            if row_num == 1:
-                print(
-                    'row_num,file_path,model_url,model_id,Size,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes,SizeB')
+                # Modality flags for Output
+                text_o = "1" if "Text" in output_mods else ""
+                image_o = "1" if "Image" in output_mods else ""
+                audio_o = "1" if "Audio" in output_mods else ""
+                video_o = "1" if "Video" in output_mods else ""
+                three_d_o = "1" if "3D" in output_mods else ""
 
-            # Print the formatted row with properly escaped symbols for CSV
-            print(
-                f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}",'
-                f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",'
-                f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",'
-                f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes},{size_bytes_str}')
+                # Token counts
+                input_tokens = get_int_token(data.get("input_tokens"))
+                output_tokens = get_int_token(data.get("output_tokens"))
+
+                row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}",' \
+                      f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",' \
+                      f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",' \
+                      f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes},{size_bytes_str}'
+
+                if row_num == 1:
+                    print(header)
+                    csv_file.write(header + '\n')
+
+                print(row)
+                csv_file.write(row + '\n')
 
         print("=" * 120)
-        print("Processing complete.")
+        print(f"Processing complete. CSV saved to {csv_file_path}")
 
     def collect_case_files(self) -> list[Path]:
         html_files = sorted(self.folder_path.rglob("model_page.html"))
