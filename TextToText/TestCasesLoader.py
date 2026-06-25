@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 from sys import exception
+
 from bs4 import BeautifulSoup, Comment, NavigableString
 
 
@@ -43,9 +44,11 @@ class TestCasesLoaded:
         """Scan for .sql files and attach prompt to each."""
         if not self.prompt_content:
             return []
+
         sql_files = sorted(self.folder_path.glob("*.sql"))
         if not sql_files:
             return []
+
         cases = []
         for sql_file in sql_files:
             with open(sql_file, 'r', encoding='utf-8') as f:
@@ -67,6 +70,7 @@ class TestCasesLoaded:
                     "prompt": f"{self.prompt_content}\n====SCRIPT START====\n{sql_content}\n====SCRIPT END====",
                     "sql": sql_content
                 })
+
         return cases
 
     def get_test_prompts(self) -> list:
@@ -182,6 +186,7 @@ class TestCasesLoaded:
             f.write(f"Total Length of Output Script: {total_output_script_len}\n")
             f.write("========\n")
             f.write("*/\n")
+
             for name in sorted_names:
                 res = self.results_data[name]
                 f.write("/*\n")
@@ -221,6 +226,29 @@ class HtmlCasesLoaded(TestCasesLoaded):
         # Dictionary to store results for combined output files
         self.results_data = {}
 
+    @staticmethod
+    def _parse_size_to_bytes(size_str: str) -> int:
+        """Convert human-readable size string (e.g., '68.8 GB') to bytes."""
+        if not size_str:
+            return 0
+        size_str = size_str.strip().upper().replace(',', '')
+        match = re.match(r'^([0-9.]+)\s*(B|KB|MB|GB|TB|PB|KIB|MIB|GIB|TIB|PIB)$', size_str)
+        if not match:
+            return 0
+
+        value = float(match.group(1))
+        unit = match.group(2).replace('I', '')  # Normalize GiB to GB, etc.
+
+        multipliers = {
+            'B': 1,
+            'KB': 1024,
+            'MB': 1024 ** 2,
+            'GB': 1024 ** 3,
+            'TB': 1024 ** 4,
+            'PB': 1024 ** 5
+        }
+        return int(value * multipliers.get(unit, 1))
+
     def _collect_existing_results(self):
         html_files = self.collect_case_files()
         if not html_files:
@@ -228,16 +256,17 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         existing_data = []
         for i, html_file in enumerate(html_files):
+            if i % 20 == 0:
+                print(f"{i:>6} {html_file}")
             model_page_path = html_file.parent / "model_page.json"
             if not model_page_path.exists():
                 continue
 
-            # --- NEW LOGIC: Load model_info.json if it exists ---
+            # --- Load model_info.json if it exists ---
             model_info_path = html_file.parent / "model_info.json"
             model_id = ""
             downloads = 0
             likes = 0
-
             if model_info_path.exists():
                 try:
                     with open(model_info_path, 'r', encoding='utf-8') as f:
@@ -245,6 +274,29 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     model_id = info_data.get("Model ID", "") or ""
                     downloads = info_data.get("Downloads", 0) or 0
                     likes = info_data.get("Likes", 0) or 0
+                except Exception:
+                    pass
+
+            # --- Load model_files_page.html to extract size ---
+            size_str = ""
+            size_bytes_str = ""
+            model_files_page_path = html_file.parent / "model_files_page.html"
+            if model_files_page_path.exists():
+                try:
+                    with open(model_files_page_path, 'r', encoding='utf-8') as f:
+                        files_html_content = f.read()
+
+                    soup_files = BeautifulSoup(files_html_content, 'html.parser')
+                    # Find the specific div containing the size based on unique Tailwind classes
+                    target_div = soup_files.find(
+                        'div',
+                        class_=lambda c: c and 'py-[3px]' in c and 'font-mono' in c and 'text-gray-500' in c
+                    )
+
+                    if target_div:
+                        size_str = target_div.get_text(strip=True)
+                        size_bytes = self._parse_size_to_bytes(size_str)
+                        size_bytes_str = str(size_bytes)
                 except Exception:
                     pass
             # ----------------------------------------------------
@@ -262,18 +314,17 @@ class HtmlCasesLoaded(TestCasesLoaded):
                         "model_id": model_id,
                         "downloads": downloads,
                         "likes": likes
-                    }
+                    },
+                    "size_str": size_str,
+                    "size_bytes_str": size_bytes_str
                 })
-
             except json.JSONDecodeError as e:
                 # 2. Handle invalid JSON: Load as text and print
                 print(f"Warning: {model_page_path} is not valid JSON. Error: {e}")
                 print("Falling back to reading as raw text...")
-
                 try:
                     with open(model_page_path, 'r', encoding='utf-8') as f:
                         raw_text = f.read()
-
                     print(f"\n--- Raw Content of {model_page_path} ---")
                     print(raw_text)
                     print("-" * 50 + "\n")
@@ -287,7 +338,9 @@ class HtmlCasesLoaded(TestCasesLoaded):
                             "model_id": model_id,
                             "downloads": downloads,
                             "likes": likes
-                        }
+                        },
+                        "size_str": size_str,
+                        "size_bytes_str": size_bytes_str
                     })
                 except Exception as read_err:
                     print(f"Critical Error: Could not read {model_page_path} as text. {read_err}")
@@ -298,9 +351,10 @@ class HtmlCasesLoaded(TestCasesLoaded):
                             "model_id": model_id,
                             "downloads": downloads,
                             "likes": likes
-                        }
+                        },
+                        "size_str": size_str,
+                        "size_bytes_str": size_bytes_str
                     })
-
             except Exception as e:
                 # Handle other potential file system errors (e.g., permissions)
                 print(f"Error: An unexpected error occurred while reading {model_page_path}: {e}")
@@ -311,7 +365,9 @@ class HtmlCasesLoaded(TestCasesLoaded):
                         "model_id": model_id,
                         "downloads": downloads,
                         "likes": likes
-                    }
+                    },
+                    "size_str": size_str,
+                    "size_bytes_str": size_bytes_str
                 })
 
         # ==========================================
@@ -338,6 +394,10 @@ class HtmlCasesLoaded(TestCasesLoaded):
             file_path = item.get("file_path", "Unknown Path")
             model_info_data = item.get("model_info", {})
 
+            # Extract newly added size fields
+            size_str = item.get("size_str", "")
+            size_bytes_str = item.get("size_bytes_str", "")
+
             # Extract model_id, downloads, and likes from the loaded model_info
             model_id = model_info_data.get("model_id", "") or ""
             downloads = model_info_data.get("downloads", 0) or 0
@@ -349,10 +409,10 @@ class HtmlCasesLoaded(TestCasesLoaded):
             # If an error occurred during parsing/reading, print the error and skip to next
             if "error" in item:
                 err_msg = escape_csv(item['error'])
-                # Pad with 12 empty columns to maintain the 20-column CSV structure
+                # Pad with 12 empty columns to maintain the 22-column CSV structure
                 empty_cols = ",".join(['""'] * 12)
                 print(
-                    f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","ERROR","{err_msg}",{empty_cols},{downloads},{likes}')
+                    f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}","ERROR","{err_msg}",{empty_cols},{downloads},{likes},{size_bytes_str}')
                 continue
 
             # Extract JSON data
@@ -365,7 +425,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
             # Format modalities as comma-separated strings
             input_mods = data.get("input_modalities") or []
             output_mods = data.get("output_modalities") or []
-
             input_modalities = ",".join(str(m) for m in input_mods) if isinstance(input_mods, list) else ""
             output_modalities = ",".join(str(m) for m in output_mods) if isinstance(output_mods, list) else ""
 
@@ -388,13 +447,14 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
             if row_num == 1:
                 print(
-                    'row_num,file_path,model_url,model_id,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes')
+                    'row_num,file_path,model_url,model_id,Size,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes,SizeB')
 
             # Print the formatted row with properly escaped symbols for CSV
-            print(f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}",'
-                  f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",'
-                  f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",'
-                  f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes}')
+            print(
+                f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}",'
+                f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",'
+                f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",'
+                f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes},{size_bytes_str}')
 
         print("=" * 120)
         print("Processing complete.")
@@ -407,42 +467,47 @@ class HtmlCasesLoaded(TestCasesLoaded):
         """Scan for .html files recursively and attach prompt to each."""
         if not self.prompt_content:
             return []
+
         html_files = self.collect_case_files()
         if not html_files:
             return []
+
         cases = []
         for i, html_file in enumerate(html_files):
             model_page_path = html_file.parent / "model_page.json"
             model_page_path_txt = html_file.parent / "model_page.txt"
+
             if model_page_path_txt.exists():
                 print(rf'skipping {html_file.parent}\{html_file.name} (previous error)')
                 continue
+
             if model_page_path.exists():
                 try:
                     target_date = datetime(2026, 6, 20, 14, 0, 0)
                     last_modified_time = datetime.fromtimestamp(Path(model_page_path).stat().st_mtime)
                     is_older = last_modified_time < target_date
+
                     if not is_older:
                         with open(model_page_path, 'r', encoding='utf-8') as f:
                             data = json.load(f)
-                            if "model_name" in data:
-                                print(rf'skipping {html_file.parent}\{html_file.name}')
-                                continue
-
+                        if "model_name" in data:
+                            print(rf'skipping {html_file.parent}\{html_file.name}')
+                            continue
                 except Exception as e:
                     print(e)
 
             with open(html_file, 'r', encoding='utf-8') as f:
                 html_content = f.read()
+
             original_len = len(html_content)
+
             if HtmlCasesLoaded.USE_MARKUP_STRIPPING:
                 html_content = self.html_to_formatted_text(html_content)
             else:
                 html_content = self.clean_html(html_content, html_file)
+
             stripped_len = len(html_content)
-
             print(f"{i:>6} {html_file} stripped: {original_len} -> {stripped_len}")
-
             if stripped_len > 240000:
                 print(stripped_len)
 
@@ -470,7 +535,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         # Sort by Downloads + Likes * 200 DESC
         cases.sort(key=lambda x: x["downloads"] + x["likes"] * 200, reverse=True)
-        #cases.sort(key=lambda x: len(x["prompt"]))
+        # cases.sort(key=lambda x: len(x["prompt"]))
+
         return cases
 
     def save_test_case_result(self, case_index: int, success: bool, output_text: str,
@@ -574,14 +640,11 @@ class HtmlCasesLoaded(TestCasesLoaded):
         html_content_stripped = str(soup)
         stripped_len = len(html_content_stripped)
 
-        #print(f"{html_file} stripped: {original_len} -> {stripped_len}")
-
-        #if stripped_len > 240000:
+        # print(f"{html_file} stripped: {original_len} -> {stripped_len}")
+        # if stripped_len > 240000:
         #    print(stripped_len)
 
         return html_content_stripped
-
-
 
     def html_to_formatted_text(self, html_content: str) -> str:
         """
@@ -614,6 +677,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     rows.append("| " + " | ".join(cells) + " |")
 
             table_text = "\n".join(rows)
+
             # Replace the HTML table with our formatted text block
             table.replace_with(NavigableString(f"\n[Table Start]\n{table_text}\n[Table End]\n"))
 
@@ -637,5 +701,3 @@ class HtmlCasesLoaded(TestCasesLoaded):
         text = re.sub(r'\n{3,}', '\n\n', text)
 
         return text.strip()
-
-
