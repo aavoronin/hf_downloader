@@ -25,8 +25,18 @@ def execute_download():
     """
 
     start_urls = [
-        #"https://huggingface.co/models?sort=likes",
-        #"https://huggingface.co/models?sort=downloads",
+        "https://huggingface.co/models?sort=likes",
+        "https://huggingface.co/models?sort=downloads",
+        "https://huggingface.co/models?sort=trending",
+    ]
+    root_folder = r"D:\AIs\Info"
+    HFModelLister.MAX_PAGES = 50
+    for start_url in start_urls:
+        for _ in range(1):
+            download_models_info(root_folder,
+                start_urls=[start_url], first_only = False)
+
+    start_urls = [
         "https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads",
         "https://huggingface.co/models?pipeline_tag=document-question-answering&sort=downloads",
         "https://huggingface.co/models?pipeline_tag=object-detection&sort=downloads",
@@ -37,8 +47,44 @@ def execute_download():
         "https://huggingface.co/models?pipeline_tag=video-text-to-text&sort=downloads",
         "https://huggingface.co/models?pipeline_tag=mask-generation&sort=downloads",
         "https://huggingface.co/models?pipeline_tag=text-to-speech&sort=downloads",
+        "https://huggingface.co/models?pipeline_tag=image-feature-extraction&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=keypoint-detection&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=mask-generation&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=unconditional-image-generation&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=image-to-image&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=text-to-image&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=summarization&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=table-question-answering&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=question-answering&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=sentence-similarity&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=audio-classification&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=voice-activity-detection&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=audio-to-audio&sort=trending",
+        "https://huggingface.co/models?pipeline_tag=text-to-audio&sort=trending",
 
+        "https://huggingface.co/models?sort=likes&search=gemma",
+        "https://huggingface.co/models?sort=likes&search=qwen",
+        "https://huggingface.co/models?sort=likes&search=Llama",
+        "https://huggingface.co/models?sort=likes&search=Mistral",
+        "https://huggingface.co/models?sort=likes&search=Mixtral",
+        "https://huggingface.co/models?sort=likes&search=Pixtral",
+        "https://huggingface.co/models?sort=likes&search=Codestral",
+        "https://huggingface.co/models?sort=likes&search=DeepSeek",
+        "https://huggingface.co/models?sort=likes&search=Phi",
+        "https://huggingface.co/models?sort=likes&search=Microsoft",
+        "https://huggingface.co/models?sort=likes&search=Command",
+        "https://huggingface.co/models?sort=likes&search=SmolLM",
+        "https://huggingface.co/models?sort=likes&search=Yi",
+        "https://huggingface.co/models?sort=likes&search=Microsoft",
+        "https://huggingface.co/models?sort=likes&search=Idefics",
+        "https://huggingface.co/models?sort=likes&search=StarCoder",
+        "https://huggingface.co/models?sort=likes&search=BLOOM",
+        "https://huggingface.co/models?sort=likes&search=OLMo",
+        "https://huggingface.co/models?sort=likes&search=Cosmos",
     ]
+
+
     root_folder = r"D:\AIs\Info"
     HFModelLister.MAX_PAGES = 10
     for start_url in start_urls:
