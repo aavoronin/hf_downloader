@@ -3,9 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 from sys import exception
-
 from bs4 import BeautifulSoup, Comment, NavigableString
-
 
 class TestCasesLoaded:
     BREAK_MARKER = '\n-- BREAK'
@@ -303,6 +301,51 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         return size_str, size_bytes_str
 
+    def _get_model_exact_tags(self, html_file: Path) -> list[str]:
+        """
+        Load or parse model tags from model_page.html.
+        Checks for model_tags.json first. If not found, parses
+        model_page.html and saves the result to JSON.
+        Returns a list of tags.
+        """
+        json_path = html_file.parent / "model_tags.json"
+
+        if json_path.exists():
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    tags = json.load(f)
+                if isinstance(tags, list):
+                    return tags
+            except Exception:
+                pass
+
+        tags = []
+        if html_file.exists():
+            try:
+                with open(html_file, 'r', encoding='utf-8') as f:
+                    html_content = f.read()
+
+                soup = BeautifulSoup(html_content, 'html.parser')
+
+                # Find all 'a' tags with href starting with '/models?'
+                for a_tag in soup.find_all('a', href=lambda h: h and h.startswith('/models?')):
+                    span = a_tag.find('span')
+                    if span:
+                        tag_text = span.get_text(strip=True)
+                        if tag_text:
+                            tags.append(tag_text)
+
+                # Save to json for next time
+                try:
+                    with open(json_path, 'w', encoding='utf-8') as f:
+                        json.dump(tags, f, indent=2, ensure_ascii=False)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        return tags
+
     def _collect_existing_results(self):
         html_files = self.collect_case_files()
         if not html_files:
@@ -333,6 +376,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
             # --- Load model_files_page info (Size and SizeB) ---
             size_str, size_bytes_str = self._get_model_files_info(html_file.parent)
+            exact_tags = self._get_model_exact_tags(html_file)
             # ---------------------------------------------------
 
             try:
@@ -350,7 +394,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
                         "likes": likes
                     },
                     "size_str": size_str,
-                    "size_bytes_str": size_bytes_str
+                    "size_bytes_str": size_bytes_str,
+                    "exact_tags": exact_tags
                 })
             except json.JSONDecodeError as e:
                 # 2. Handle invalid JSON: Load as text and print
@@ -374,7 +419,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
                             "likes": likes
                         },
                         "size_str": size_str,
-                        "size_bytes_str": size_bytes_str
+                        "size_bytes_str": size_bytes_str,
+                        "exact_tags": exact_tags
                     })
                 except Exception as read_err:
                     print(f"Critical Error: Could not read {model_page_path} as text. {read_err}")
@@ -387,7 +433,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
                             "likes": likes
                         },
                         "size_str": size_str,
-                        "size_bytes_str": size_bytes_str
+                        "size_bytes_str": size_bytes_str,
+                        "exact_tags": exact_tags
                     })
             except Exception as e:
                 # Handle other potential file system errors (e.g., permissions)
@@ -401,7 +448,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
                         "likes": likes
                     },
                     "size_str": size_str,
-                    "size_bytes_str": size_bytes_str
+                    "size_bytes_str": size_bytes_str,
+                    "exact_tags": exact_tags
                 })
 
         # ==========================================
@@ -426,17 +474,17 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 except (ValueError, TypeError):
                     return ""
 
-            header = 'row_num,file_path,model_url,model_id,Size,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes,SizeB'
+            header = 'row_num,file_path,model_url,model_id,Size,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes,SizeB,ExactTags'
 
             for row_num, item in enumerate(existing_data, start=1):
-                if row_num % 100 == 0:
-                    print(f"{row_num:6} of {len(existing_data):8} existing cases")
                 file_path = item.get("file_path", "Unknown Path")
                 model_info_data = item.get("model_info", {})
 
                 # Extract newly added size fields
                 size_str = item.get("size_str", "")
                 size_bytes_str = item.get("size_bytes_str", "")
+                exact_tags = item.get("exact_tags", [])
+                exact_tags_str = escape_csv("|".join(exact_tags))
 
                 # Extract model_id, downloads, and likes from the loaded model_info
                 model_id = model_info_data.get("model_id", "") or ""
@@ -449,9 +497,9 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 # If an error occurred during parsing/reading, print the error and skip to next
                 if "error" in item:
                     err_msg = escape_csv(item['error'])
-                    # Pad with 12 empty columns to maintain the 22-column CSV structure
+                    # Pad with 12 empty columns to maintain the CSV structure up to SizeB
                     empty_cols = ",".join(['""'] * 12)
-                    row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}","ERROR","{err_msg}",{empty_cols},{downloads},{likes},{size_bytes_str}'
+                    row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}","ERROR","{err_msg}",{empty_cols},{downloads},{likes},{size_bytes_str},"{exact_tags_str}"'
 
                     if row_num == 1:
                         print(header)
@@ -493,14 +541,13 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}",' \
                       f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",' \
                       f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",' \
-                      f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes},{size_bytes_str}'
+                      f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes},{size_bytes_str},{exact_tags_str}'
 
                 if row_num == 1:
                     print(header)
                     csv_file.write(header + '\n')
 
-                if row_num % 100 == 0:
-                    print(row)
+                print(row)
                 csv_file.write(row + '\n')
 
         print("=" * 120)
