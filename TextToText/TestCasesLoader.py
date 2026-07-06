@@ -429,6 +429,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
             header = 'row_num,file_path,model_url,model_id,Size,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes,SizeB'
 
             for row_num, item in enumerate(existing_data, start=1):
+                if row_num % 100 == 0:
+                    print(f"{row_num:6} of {len(existing_data):8} existing cases")
                 file_path = item.get("file_path", "Unknown Path")
                 model_info_data = item.get("model_info", {})
 
@@ -497,7 +499,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     print(header)
                     csv_file.write(header + '\n')
 
-                print(row)
+                if row_num % 100 == 0:
+                    print(row)
                 csv_file.write(row + '\n')
 
         print("=" * 120)
