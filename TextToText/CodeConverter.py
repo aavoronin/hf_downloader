@@ -160,7 +160,7 @@ class KnowledgeMiner:
 
             output_preview = predicted_text[:2000] if predicted_text else ""
             print(f"Result Case {i}:\n{output_preview}")
-            print(f"Time: {elapsed_case:.2f}s | Status: {case_success}")
+            print(f"{i:>6} Time: {elapsed_case:.2f}s | Status: {case_success} | prompt len: {len(prompt)}")
 
             prompt_len = len(prompt)
             input_script_len = prompt_len - len(

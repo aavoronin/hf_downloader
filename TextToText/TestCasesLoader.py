@@ -222,7 +222,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
         self.output_dir = out_folder / timestamp
 
         # Create the directory structure
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        #self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Dictionary to store results for combined output files
         self.results_data = {}
@@ -455,7 +455,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
         # ==========================================
         # FINAL LOOP: Print Summary as CSV & Save to File
         # ==========================================
-        print(f"\nTotal records loaded: {len(existing_data)}")
+        print(f"\nTotal records loaded: {len(existing_data)} "
+              f"remaining: {len(html_files) - len(existing_data)}")
         print("=" * 120)
 
         csv_file_path = self.output_folder / "models_summary.csv"
@@ -547,7 +548,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     print(header)
                     csv_file.write(header + '\n')
 
-                print(row)
+                #print(row)
                 csv_file.write(row + '\n')
 
         print("=" * 120)
