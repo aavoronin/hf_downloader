@@ -5,6 +5,7 @@ from datetime import datetime
 from sys import exception
 from bs4 import BeautifulSoup, Comment, NavigableString
 
+
 class TestCasesLoaded:
     BREAK_MARKER = '\n-- BREAK'
 
@@ -352,6 +353,8 @@ class HtmlCasesLoaded(TestCasesLoaded):
             return []
 
         existing_data = []
+        tag_counts = {}  # Dictionary to count tag occurrences
+
         for i, html_file in enumerate(html_files):
             if i % 20 == 0:
                 print(f"{i:>6} {html_file}")
@@ -377,6 +380,11 @@ class HtmlCasesLoaded(TestCasesLoaded):
             # --- Load model_files_page info (Size and SizeB) ---
             size_str, size_bytes_str = self._get_model_files_info(html_file.parent)
             exact_tags = self._get_model_exact_tags(html_file)
+
+            # --- Count tags (lowercase) ---
+            for tag in exact_tags:
+                tag_lower = tag.lower()
+                tag_counts[tag_lower] = tag_counts.get(tag_lower, 0) + 1
             # ---------------------------------------------------
 
             try:
@@ -542,7 +550,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}",' \
                       f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",' \
                       f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",' \
-                      f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes},{size_bytes_str},{exact_tags_str}'
+                      f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes},{size_bytes_str},"{exact_tags_str}"'
 
                 if row_num == 1:
                     print(header)
@@ -553,6 +561,19 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         print("=" * 120)
         print(f"Processing complete. CSV saved to {csv_file_path}")
+
+        # ==========================================
+        # PRINT TAG STATISTICS
+        # ==========================================
+        if tag_counts:
+            print("\n🏷️ TAG STATISTICS (Sorted by frequency)")
+            print("-" * 40)
+            sorted_tags = sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)
+            for i, (tag, count) in enumerate(sorted_tags):
+                print(f"{i:>6} {tag}: {count}")
+        else:
+            print("\n🏷️ No tags found.")
+        print("\n🏷️ tags printed.")
 
     def collect_case_files(self) -> list[Path]:
         html_files = sorted(self.folder_path.rglob("model_page.html"))
