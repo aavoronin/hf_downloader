@@ -201,6 +201,7 @@ class TestCasesLoaded:
 class HtmlCasesLoaded(TestCasesLoaded):
     BREAK_MARKER = '\n-- BREAK'
     USE_MARKUP_STRIPPING = True
+    TOP_TAGS_COUNT = 200
 
     def __init__(self, folder_path: str, output_folder: str = r"D:\AIs\Info"):
         self.folder_path = Path(folder_path)
@@ -223,7 +224,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
         self.output_dir = out_folder / timestamp
 
         # Create the directory structure
-        #self.output_dir.mkdir(parents=True, exist_ok=True)
+        # self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Dictionary to store results for combined output files
         self.results_data = {}
@@ -280,6 +281,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     files_html_content = f.read()
 
                 soup_files = BeautifulSoup(files_html_content, 'html.parser')
+
                 # Find the specific div containing the size based on unique Tailwind classes
                 target_div = soup_files.find(
                     'div',
@@ -358,6 +360,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
         for i, html_file in enumerate(html_files):
             if i % 20 == 0:
                 print(f"{i:>6} {html_file}")
+
             model_page_path = html_file.parent / "model_page.json"
             if not model_page_path.exists():
                 continue
@@ -405,13 +408,16 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     "size_bytes_str": size_bytes_str,
                     "exact_tags": exact_tags
                 })
+
             except json.JSONDecodeError as e:
                 # 2. Handle invalid JSON: Load as text and print
                 print(f"Warning: {model_page_path} is not valid JSON. Error: {e}")
                 print("Falling back to reading as raw text...")
+
                 try:
                     with open(model_page_path, 'r', encoding='utf-8') as f:
                         raw_text = f.read()
+
                     print(f"\n--- Raw Content of {model_page_path} ---")
                     print(raw_text)
                     print("-" * 50 + "\n")
@@ -444,6 +450,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
                         "size_bytes_str": size_bytes_str,
                         "exact_tags": exact_tags
                     })
+
             except Exception as e:
                 # Handle other potential file system errors (e.g., permissions)
                 print(f"Error: An unexpected error occurred while reading {model_page_path}: {e}")
@@ -461,6 +468,13 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 })
 
         # ==========================================
+        # DETERMINE TOP TAGS
+        # ==========================================
+        sorted_tags = sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)
+        top_tags = [tag for tag, count in sorted_tags[:self.TOP_TAGS_COUNT]]
+        top_tags_set = set(top_tags)
+
+        # ==========================================
         # FINAL LOOP: Print Summary as CSV & Save to File
         # ==========================================
         print(f"\nTotal records loaded: {len(existing_data)} "
@@ -468,6 +482,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
         print("=" * 120)
 
         csv_file_path = self.output_folder / "models_summary.csv"
+
         with open(csv_file_path, 'w', encoding='utf-8') as csv_file:
             # Helper function to properly escape double quotes for CSV format
             def escape_csv(val):
@@ -483,7 +498,11 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 except (ValueError, TypeError):
                     return ""
 
-            header = 'row_num,file_path,model_url,model_id,Size,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes,SizeB,ExactTags'
+            base_header = 'row_num,file_path,model_url,model_id,Size,input_modalities,Text_I,Image_I,Audio_I,Video_I,output_modalities,Text_O,Image_O,Audio_O,Video_O,3D_O,model_size,input_tokens,output_tokens,downloads,likes,SizeB'
+            header = base_header + ',' + ','.join(top_tags) + ',RemainingTags'
+
+            print(header)
+            csv_file.write(header + '\n')
 
             for row_num, item in enumerate(existing_data, start=1):
                 file_path = item.get("file_path", "Unknown Path")
@@ -493,7 +512,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 size_str = item.get("size_str", "")
                 size_bytes_str = item.get("size_bytes_str", "")
                 exact_tags = item.get("exact_tags", [])
-                exact_tags_str = escape_csv("|".join(exact_tags))
+                exact_tags_lower = [t.lower() for t in exact_tags]
 
                 # Extract model_id, downloads, and likes from the loaded model_info
                 model_id = model_info_data.get("model_id", "") or ""
@@ -506,13 +525,12 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 # If an error occurred during parsing/reading, print the error and skip to next
                 if "error" in item:
                     err_msg = escape_csv(item['error'])
-                    # Pad with 12 empty columns to maintain the CSV structure up to SizeB
                     empty_cols = ",".join(['""'] * 12)
-                    row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}","ERROR","{err_msg}",{empty_cols},{downloads},{likes},{size_bytes_str},"{exact_tags_str}"'
+                    base_row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}","ERROR","{err_msg}",{empty_cols},{downloads},{likes},{size_bytes_str}'
 
-                    if row_num == 1:
-                        print(header)
-                        csv_file.write(header + '\n')
+                    empty_tag_cols = "," + ",".join([""] * len(top_tags))
+                    row = base_row + empty_tag_cols + ',\"\"'
+
                     print(row)
                     csv_file.write(row + '\n')
                     continue
@@ -547,16 +565,20 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 input_tokens = get_int_token(data.get("input_tokens"))
                 output_tokens = get_int_token(data.get("output_tokens"))
 
-                row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}",' \
-                      f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",' \
-                      f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",' \
-                      f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes},{size_bytes_str},"{exact_tags_str}"'
+                base_row = f'{row_num},"{escape_csv(file_path)}","{model_url}","{escape_csv(model_id)}","{escape_csv(size_str)}",' \
+                           f'"{escape_csv(input_modalities)}","{text_i}","{image_i}","{audio_i}","{video_i}",' \
+                           f'"{escape_csv(output_modalities)}","{text_o}","{image_o}","{audio_o}","{video_o}","{three_d_o}",' \
+                           f'"{escape_csv(model_size)}","{input_tokens}","{output_tokens}",{downloads},{likes},{size_bytes_str}'
 
-                if row_num == 1:
-                    print(header)
-                    csv_file.write(header + '\n')
+                # Add top tags columns
+                tag_cols = ["1" if t in exact_tags_lower else "" for t in top_tags]
+                row = base_row + "," + ",".join(tag_cols)
 
-                #print(row)
+                # Add remaining tags
+                remaining_tags = [t for t in exact_tags if t.lower() not in top_tags_set]
+                row += "," + escape_csv("|".join(remaining_tags))
+
+                # print(row)
                 csv_file.write(row + '\n')
 
         print("=" * 120)
@@ -573,7 +595,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 print(f"{i:>6} {tag}: {count}")
         else:
             print("\n🏷️ No tags found.")
-        print("\n🏷️ tags printed.")
+            print("\n🏷️ tags printed.")
 
     def collect_case_files(self) -> list[Path]:
         html_files = sorted(self.folder_path.rglob("model_page.html"))
@@ -616,7 +638,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 html_content = f.read()
 
             original_len = len(html_content)
-
             if HtmlCasesLoaded.USE_MARKUP_STRIPPING:
                 html_content = self.html_to_formatted_text(html_content)
             else:
@@ -624,6 +645,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
             stripped_len = len(html_content)
             print(f"{i:>6} {html_file} stripped: {original_len} -> {stripped_len}")
+
             if stripped_len > 240000:
                 print(stripped_len)
 
@@ -755,7 +777,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         html_content_stripped = str(soup)
         stripped_len = len(html_content_stripped)
-
         # print(f"{html_file} stripped: {original_len} -> {stripped_len}")
         # if stripped_len > 240000:
         #    print(stripped_len)
@@ -793,7 +814,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     rows.append("| " + " | ".join(cells) + " |")
 
             table_text = "\n".join(rows)
-
             # Replace the HTML table with our formatted text block
             table.replace_with(NavigableString(f"\n[Table Start]\n{table_text}\n[Table End]\n"))
 
@@ -814,6 +834,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
         text = soup.get_text(separator='\n')
 
         # 7. Clean up excessive blank lines
-        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r'\n{3,}', '\n', text)
 
         return text.strip()
