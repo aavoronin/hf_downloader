@@ -471,7 +471,27 @@ class HtmlCasesLoaded(TestCasesLoaded):
         # DETERMINE TOP TAGS
         # ==========================================
         sorted_tags = sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)
-        top_tags = [tag for tag, count in sorted_tags[:self.TOP_TAGS_COUNT]]
+        all_top_tags = [tag for tag, count in sorted_tags[:self.TOP_TAGS_COUNT]]
+
+        # Regex to match pattern: (word-){1,}to(-word){1,}
+        # Examples: text-to-image, image-text-to-text, text-image-to-3d-image
+        pattern = re.compile(r'^([a-z0-9]+-)+to(-[a-z0-9]+)+$')
+
+        group_to = []
+        group_other = []
+
+        for tag in all_top_tags:
+            if pattern.match(tag):
+                group_to.append(tag)
+            else:
+                group_other.append(tag)
+
+        # Sort both groups alphabetically
+        group_to.sort()
+        group_other.sort()
+
+        # Combine: "to" pattern tags first, then the rest
+        top_tags = group_to + group_other
         top_tags_set = set(top_tags)
 
         # ==========================================
