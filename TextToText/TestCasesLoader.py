@@ -201,7 +201,7 @@ class TestCasesLoaded:
 class HtmlCasesLoaded(TestCasesLoaded):
     BREAK_MARKER = '\n-- BREAK'
     USE_MARKUP_STRIPPING = True
-    TOP_TAGS_COUNT = 200
+    TOP_TAGS_COUNT = 300
 
     def __init__(self, folder_path: str, output_folder: str = r"D:\AIs\Info"):
         self.folder_path = Path(folder_path)
