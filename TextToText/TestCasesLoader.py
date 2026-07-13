@@ -304,11 +304,12 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         return size_str, size_bytes_str
 
-    def _get_model_exact_tags(self, html_file: Path) -> list[str]:
+    def _get_model_exact_tags(self, html_file: Path, model_id: str) -> list[str]:
         """
         Load or parse model tags from model_page.html.
         Checks for model_tags.json first. If not found, parses
         model_page.html and saves the result to JSON.
+        Also extracts valid tags from the model_id.
         Returns a list of tags.
         """
         json_path = html_file.parent / "model_tags.json"
@@ -337,6 +338,44 @@ class HtmlCasesLoaded(TestCasesLoaded):
                         tag_text = span.get_text(strip=True)
                         if tag_text:
                             tags.append(tag_text)
+
+                # --- Add tags derived from model_id ---
+                if model_id:
+                    # Split by -, /, \, _
+                    parts = re.split(r'[-/\\_]', model_id)
+                    for part in parts:
+                        part = part.strip()
+                        if not part:
+                            continue
+
+                        # 1. Exclude tags containing a single symbol
+                        if len(part) <= 1:
+                            continue
+
+                        # 2. Exclude tags containing no letters
+                        if not re.search(r'[a-zA-Z]', part):
+                            continue
+
+                        part_lower = part.lower()
+
+                        # 3. Exclude pure numbers such as 1, 2, 444, 8798 or 1.0, 2.3, 5.01 etc.
+                        if re.match(r'^\d+(\.\d+)?$', part):
+                            continue
+
+                        # 4. Exclude v<number> such as v1, v2.1, v0.4 etc.
+                        if re.match(r'^v\d+(\.\d+)?$', part_lower):
+                            continue
+
+                        # 5. Exclude numbers followed by B, m, or g such as 32B, 0.5B, 1.5B, 320m, 81m, 10g
+                        if re.match(r'^\d+(\.\d+)?[bmg]$', part_lower):
+                            continue
+
+                        # Add if not already in tags to avoid duplicates
+                        if part not in tags:
+                            tags.append(part)
+                # --------------------------------------
+
+                tags = list(set([t.lower() for t in tags]))
 
                 # Save to json for next time
                 try:
@@ -382,7 +421,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
             # --- Load model_files_page info (Size and SizeB) ---
             size_str, size_bytes_str = self._get_model_files_info(html_file.parent)
-            exact_tags = self._get_model_exact_tags(html_file)
+            exact_tags = self._get_model_exact_tags(html_file, model_id)
 
             # --- Count tags (lowercase) ---
             for tag in exact_tags:
