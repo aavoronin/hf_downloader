@@ -313,13 +313,17 @@ class HtmlCasesLoaded(TestCasesLoaded):
         Returns a list of tags.
         """
         json_path = html_file.parent / "model_tags.json"
+        cutoff_date = datetime(2026, 7, 13, 20, 16, 0)
 
         if json_path.exists():
             try:
-                with open(json_path, 'r', encoding='utf-8') as f:
-                    tags = json.load(f)
-                if isinstance(tags, list):
-                    return tags
+                # Check if the file was modified after the cutoff date
+                mod_time = datetime.fromtimestamp(json_path.stat().st_mtime)
+                if mod_time > cutoff_date:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        tags = json.load(f)
+                    if isinstance(tags, list):
+                        return tags
             except Exception:
                 pass
 
