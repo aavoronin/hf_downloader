@@ -37,6 +37,13 @@ def execute_download():
                 start_urls=[start_url], first_only = False)
 
     start_urls = [
+        "https://huggingface.co/models?pipeline_tag=text-generation&sort=trending&search=grammar",
+        "https://huggingface.co/models?pipeline_tag=translation&sort=trending&search=ru",
+        "https://huggingface.co/models?pipeline_tag=question-answering&sort=trending&search=ru",
+        "https://huggingface.co/models?language=ru",
+        "https://huggingface.co/models?language=en",
+        "https://huggingface.co/models?language=ru&sort=trending&search=tran",
+        "https://huggingface.co/models?pipeline_tag=text-generation&sort=trending&search=ru+translation",
         "https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads",
         "https://huggingface.co/models?pipeline_tag=document-question-answering&sort=downloads",
         "https://huggingface.co/models?pipeline_tag=object-detection&sort=downloads",
