@@ -385,6 +385,15 @@ class HtmlCasesLoaded(TestCasesLoaded):
             "Text"} and "ocr" not in exact_tags_lower:
             self.text_image_to_text_nonocr_models.append(model_full_info)
 
+    def print_collection(self, name, collection):
+        print(f"\ncollection {name} ({len(collection)} models):")
+        for m in collection:
+            size_gb = m.SizeB / (1024 ** 3) if m.SizeB is not None else 0.0
+            print(f"{m.model_id} -- {size_gb:.2f} Gb")
+
+        combined_information_file_name = self.output_folder / f"{name}.txt"
+
+
     def _collect_existing_results(self):
         html_files = self.collect_case_files()
         if not html_files:
@@ -552,16 +561,10 @@ class HtmlCasesLoaded(TestCasesLoaded):
         print("COLLECTIONS OF INTEREST")
         print("=" * 80)
 
-        def print_collection(name, collection):
-            print(f"\n{name} ({len(collection)} models):")
-            for m in collection:
-                size_gb = m.SizeB / (1024 ** 3) if m.SizeB is not None else 0.0
-                print(f"{m.model_id} -- {size_gb:.2f} Gb")
-
-        print_collection("1. text_to_text_models", self.text_to_text_models)
-        print_collection("2. text_to_image_diffusion_models", self.text_to_image_diffusion_models)
-        print_collection("3. image_to_text_ocr_models", self.image_to_text_ocr_models)
-        print_collection("4. text_image_to_text_nonocr_models", self.text_image_to_text_nonocr_models)
+        self.print_collection("text_to_text_models", self.text_to_text_models)
+        self.print_collection("text_to_image_diffusion_models", self.text_to_image_diffusion_models)
+        self.print_collection("image_to_text_ocr_models", self.image_to_text_ocr_models)
+        self.print_collection("text_image_to_text_nonocr_models", self.text_image_to_text_nonocr_models)
 
         if tag_counts:
             print("\n🏷️ TAG STATISTICS (Sorted by frequency)")
