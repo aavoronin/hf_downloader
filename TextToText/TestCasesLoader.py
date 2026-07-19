@@ -1,7 +1,6 @@
 from pathlib import Path
 from datetime import datetime
 
-
 class TestCasesLoaded:
     BREAK_MARKER = '\n-- BREAK'
 
