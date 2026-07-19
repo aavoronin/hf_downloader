@@ -27,7 +27,14 @@ class ModelFullInfo:
                  likes: Optional[int] = None,
                  SizeB: Optional[int] = None,
                  code: Optional[str] = None,
-                 sorted_tags: Optional[List] = None):
+                 sorted_tags: Optional[List] = None,
+                 model_page_path: Optional[str] = None,
+                 model_page_json_path: Optional[str] = None,
+                 model_info_path: Optional[str] = None,
+                 model_tags_path: Optional[str] = None,
+                 model_files_json_path: Optional[str] = None,
+                 model_files_html_path: Optional[str] = None):
+
         if not model_id:
             raise ValueError("model_id is mandatory and cannot be None")
 
@@ -56,3 +63,9 @@ class ModelFullInfo:
         self.SizeB = SizeB
         self.code = code
         self.sorted_tags = sorted_tags
+        self.model_page_path = model_page_path
+        self.model_page_json_path = model_page_json_path
+        self.model_info_path = model_info_path
+        self.model_tags_path = model_tags_path
+        self.model_files_json_path = model_files_json_path
+        self.model_files_html_path = model_files_html_path

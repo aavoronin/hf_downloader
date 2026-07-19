@@ -341,6 +341,15 @@ class HtmlCasesLoaded(TestCasesLoaded):
         output_tokens = get_int_val(data.get("output_tokens"))
         code = data.get("code", "")
 
+        # Determine file paths
+        model_page_json_path = file_path
+        folder_path = Path(file_path).parent
+        model_page_path = str(folder_path / "model_page.html")
+        model_info_path = str(folder_path / "model_info.json")
+        model_tags_path = str(folder_path / "model_tags.json")
+        model_files_json_path = str(folder_path / "model_files_page.json")
+        model_files_html_path = str(folder_path / "model_files_page.html")
+
         model_full_info = ModelFullInfo(
             model_id=model_id,
             file_path=file_path,
@@ -366,7 +375,13 @@ class HtmlCasesLoaded(TestCasesLoaded):
             likes=likes,
             SizeB=size_bytes_int,
             code=code,
-            sorted_tags=sorted_tags
+            sorted_tags=sorted_tags,
+            model_page_path=model_page_path,
+            model_page_json_path=model_page_json_path,
+            model_info_path=model_info_path,
+            model_tags_path=model_tags_path,
+            model_files_json_path=model_files_json_path,
+            model_files_html_path=model_files_html_path
         )
 
         input_mods_set = set(input_mods)
@@ -384,15 +399,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
         if "Image" in input_mods_set and input_mods_set <= {"Text", "Image"} and output_mods_set == {
             "Text"} and "ocr" not in exact_tags_lower:
             self.text_image_to_text_nonocr_models.append(model_full_info)
-
-    def print_collection(self, name, collection):
-        print(f"\ncollection {name} ({len(collection)} models):")
-        for m in collection:
-            size_gb = m.SizeB / (1024 ** 3) if m.SizeB is not None else 0.0
-            print(f"{m.model_id} -- {size_gb:.2f} Gb")
-
-        combined_information_file_name = self.output_folder / f"{name}.txt"
-
 
     def _collect_existing_results(self):
         html_files = self.collect_case_files()
@@ -555,7 +561,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
         print(f"Processing complete. CSV saved to {csv_file_path}")
 
         # ==========================================
-        # PRINT COLLECTIONS OF INTEREST
+        # PRINT AND WRITE COLLECTIONS OF INTEREST
         # ==========================================
         print("\n" + "=" * 80)
         print("COLLECTIONS OF INTEREST")
@@ -572,6 +578,59 @@ class HtmlCasesLoaded(TestCasesLoaded):
             sorted_tags_print = sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)
             for i, (tag, count) in enumerate(sorted_tags_print):
                 print(f"{i:>6} {tag}: {count}")
+
+    def print_collection(self, name, collection):
+        print(f"\n{name} ({len(collection)} models):")
+        for m in collection:
+            size_gb = m.SizeB / (1024 ** 3) if m.SizeB is not None else 0.0
+            print(f"{m.model_id} -- {size_gb:.2f} Gb")
+
+        combined_information_file_name = self.output_folder / f"{name}.txt"
+        with open(combined_information_file_name, 'w', encoding='utf-8') as f:
+            f.write(f"Collection: {name}\n")
+            f.write(f"Total models: {len(collection)}\n")
+            f.write("=" * 80 + "\n\n")
+
+            for i, m in enumerate(collection):
+                print(f"{i:>6}Saving info Model ID: {m.model_id}")
+                f.write(f"Model ID: {m.model_id}\n")
+                f.write(f"Model URL: {m.model_url}\n")
+                if m.input_tokens is not None:
+                    f.write(f"Input Tokens: {m.input_tokens}\n")
+                if m.output_tokens is not None:
+                    f.write(f"Output Tokens: {m.output_tokens}\n")
+                f.write("\n")
+
+                # Write text description of the model (from model_page.json)
+                if m.model_page_json_path and Path(m.model_page_json_path).exists():
+                    try:
+                        with open(m.model_page_json_path, 'r', encoding='utf-8') as jf:
+                            json_data = json.load(jf)
+                        model_name = json_data.get("model_name", "")
+                        model_size = json_data.get("model_size", "")
+                        f.write(f"Model Name: {model_name}\n")
+                        if model_size:
+                            f.write(f"Model Size (params): {model_size}\n")
+                        f.write("\n")
+                    except Exception:
+                        pass
+
+                # Write model description text (html stripped)
+                if m.model_page_path and Path(m.model_page_path).exists():
+                    try:
+                        with open(m.model_page_path, 'r', encoding='utf-8') as hf:
+                            html_content = hf.read()
+                        if self.USE_MARKUP_STRIPPING:
+                            stripped_text = self.html_to_formatted_text(html_content)
+                        else:
+                            stripped_text = self.clean_html(html_content, Path(m.model_page_path))
+                        f.write("Model Page Description:\n")
+                        f.write(stripped_text)
+                        f.write("\n")
+                    except Exception:
+                        pass
+
+                f.write("\n" + "=" * 80 + "\n\n")
 
     def collect_case_files(self) -> list[Path]:
         return sorted(self.folder_path.rglob("model_page.html"))
