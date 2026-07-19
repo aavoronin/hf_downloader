@@ -1,5 +1,6 @@
 from TextToText.CodeConverter import CodeConverter, KnowledgeMiner
-from TextToText.TestCasesLoader import TestCasesLoaded, HtmlCasesLoaded
+from TextToText.TestCasesLoader import TestCasesLoaded
+from TextToText.HtmlCasesLoaded import HtmlCasesLoaded
 from TextToText.TextToTextModelFactory import TextToTextModelFactory
 from TextToText.TextToTextModelInfo import TextToTextModelInfo
 
@@ -25,6 +26,12 @@ def TextToText_main():
     models = manager.list_available_models()
     for i, model in enumerate(models, 1):
         print(f"{i}. {model.name} - {model.size_human}")
+        #  ({model.path})
+    for i, model in enumerate(models, 1):
+        if model.size_bytes > 30 * 1024 * 1024 * 1024:
+            dest_path = str(model.path).replace("D:", "E:")
+            #print(f'Move-Item -Path "{model.path}" -Destination "{dest_path}" -Force')
+            print(f'robocopy "{model.path}" "{dest_path}" /E /MOVE /MT:16 /R:3 /W:5')
     if not models:
         print("❌ No models found. Check the path.")
         return
