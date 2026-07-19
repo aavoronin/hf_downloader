@@ -64,7 +64,7 @@ def concatenate_project_files(project_path, output_filename='combined_output.txt
     output_path = root / output_filename
 
     exclude_dirs = {'.idea', '__pycache__', '.venv', '.git', 'premsql', "TestCases", "out"}
-    exclude_extensions = {'.pyc', '.pyo', '.pyd', '.mhtml', '.cmd'}
+    exclude_extensions = {'.pyc', '.pyo', '.pyd', '.mhtml', '.cmd', '.xlsx'}
     exclude_filenames = {'.env', '.DS_Store', output_filename, ".gitignore"}
     exclude_specific_paths = {'download/my_token.py', 'README.md', 'combined_output.txt'}
 

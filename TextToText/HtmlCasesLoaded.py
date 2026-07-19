@@ -1,13 +1,232 @@
-import json
 import re
-from datetime import datetime
+import json
 from pathlib import Path
+from datetime import datetime
 from sys import exception
-from typing import Any
-
+from typing import Optional, List
+from dataclasses import dataclass
 from bs4 import BeautifulSoup, Comment, NavigableString
 
-from TextToText.TestCasesLoader import TestCasesLoaded
+
+@dataclass
+class ModelFullInfo:
+    model_id: str
+    file_path: Optional[str] = None
+    model_url: Optional[str] = None
+    has_code: Optional[bool] = None
+    Size: Optional[str] = None
+    SizeRange: Optional[str] = None
+    input_modalities: Optional[str] = None
+    Text_I: Optional[str] = None
+    Image_I: Optional[str] = None
+    Audio_I: Optional[str] = None
+    Video_I: Optional[str] = None
+    output_modalities: Optional[str] = None
+    Text_O: Optional[str] = None
+    Image_O: Optional[str] = None
+    Audio_O: Optional[str] = None
+    Video_O: Optional[str] = None
+    three_d_O: Optional[str] = None
+    model_size: Optional[str] = None
+    input_tokens: Optional[str] = None
+    output_tokens: Optional[str] = None
+    downloads: Optional[int] = None
+    likes: Optional[int] = None
+    SizeB: Optional[str] = None
+    code: Optional[str] = None
+    sorted_tags: Optional[List] = None
+
+
+class TestCasesLoaded:
+    BREAK_MARKER = '\n-- BREAK'
+
+    def __init__(self, folder_path: str):
+        self.folder_path = Path(folder_path)
+        self.prompt_content = self._load_prompt()
+        self.test_cases_data = self._load_test_cases()
+        self.test_prompts = [tc["prompt"] for tc in self.test_cases_data]
+        self.filenames = [tc["name"] for tc in self.test_cases_data]
+
+        # Create output folder structure
+        # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
+        out_folder = Path("out") / self.folder_path
+
+        # Create timestamp folder YYYYMMDDHHMMSS
+        # YYYYMMDDHHMMSS is remembered when the group of test cases is started
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        self.output_dir = out_folder / timestamp
+
+        # Create the directory structure
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Dictionary to store results for combined output files
+        self.results_data = {}
+
+    def _load_prompt(self) -> str:
+        """Load PROMPT.txt content. Returns empty string if not found."""
+        prompt_path = self.folder_path / "PROMPT.txt"
+        if not prompt_path.exists():
+            return ""
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def _load_test_cases(self) -> list:
+        """Scan for .sql files and attach prompt to each."""
+        if not self.prompt_content:
+            return []
+
+        sql_files = sorted(self.folder_path.glob("*.sql"))
+        if not sql_files:
+            return []
+
+        cases = []
+        for sql_file in sql_files:
+            with open(sql_file, 'r', encoding='utf-8') as f:
+                sql_content = f.read()
+
+            # Check for the break marker and split into virtual parts if found
+            if TestCasesLoaded.BREAK_MARKER in sql_content:
+                parts = sql_content.split(TestCasesLoaded.BREAK_MARKER)
+                for i, part in enumerate(parts, 1):
+                    part_name = f"{sql_file.stem}_part{i:03d}"
+                    cases.append({
+                        "name": part_name,
+                        "prompt": f"{self.prompt_content}\n====SCRIPT START====\n{part}\n====SCRIPT END====",
+                        "sql": part
+                    })
+            else:
+                cases.append({
+                    "name": sql_file.stem,
+                    "prompt": f"{self.prompt_content}\n====SCRIPT START====\n{sql_content}\n====SCRIPT END====",
+                    "sql": sql_content
+                })
+
+        return cases
+
+    def get_test_prompts(self) -> list:
+        """Return the list of combined prompt + SQL test cases."""
+        return self.test_prompts
+
+    def save_test_case_result(self, case_index: int, success: bool, output_text: str,
+                              time_taken: float, error_msg: str = "",
+                              prompt_text: str = "", input_script_len: int = 0,
+                              output_script_len: int = 0, model_max_tokens: str = "",
+                              model_name: str = "",
+                              output_file_extension: str = "sql"):
+        """
+        Saves the 3 result files for a specific test case into the timestamped output directory.
+        Also stores data for combined output files.
+        """
+        if 0 <= case_index < len(self.filenames):
+            basename = self.filenames[case_index]
+        else:
+            basename = f"case_{case_index}"
+
+        # 1. test_case.sql (Result) -> basename.sql
+        sql_file = self.output_dir / f"{basename}.{output_file_extension}"
+        with open(sql_file, 'w', encoding='utf-8') as f:
+            f.write(output_text if output_text else "")
+
+        # 2. test_case_PROMPT.txt (Full prompt) -> basename_PROMPT.txt
+        prompt_file = self.output_dir / f"{basename}_PROMPT.txt"
+        with open(prompt_file, 'w', encoding='utf-8') as f:
+            f.write(prompt_text)
+
+        # 3. test_case.log -> basename.log
+        log_file = self.output_dir / f"{basename}.log"
+        log_content = (
+            f"Test Case: {basename}\n"
+            f"Model: {model_name}\n"
+            f"Status: {'Success' if success else 'Failure'}\n"
+            f"Error: {error_msg if error_msg else 'None'}\n"
+            f"Time Taken: {time_taken:.4f}s\n"
+            f"Prompt Length: {len(prompt_text)}\n"
+            f"Input Tokens (Approx): {len(prompt_text)}\n"
+            f"Model Max Input/Output Tokens: {model_max_tokens}\n"
+            f"Length of Input Script: {input_script_len}\n"
+            f"Length of Output Script: {output_script_len}\n"
+        )
+        with open(log_file, 'w', encoding='utf-8') as f:
+            f.write(log_content)
+
+        # Find original SQL for this case
+        original_sql = ""
+        for tc in self.test_cases_data:
+            if tc["name"] == basename:
+                original_sql = tc["sql"]
+                break
+
+        # Escape nested comments in original query
+        escaped_original_sql = original_sql.replace("/*", "/ *").replace("*/", "* /")
+
+        # Store for combined files generation
+        self.results_data[basename] = {
+            "log_content": log_content,
+            "original_sql": escaped_original_sql,
+            "output_sql": output_text if output_text else "",
+            "success": success,
+            "time_taken": time_taken,
+            "prompt_length": len(prompt_text),
+            "input_tokens": len(prompt_text),
+            "input_script_len": input_script_len,
+            "output_script_len": output_script_len
+        }
+
+    def save_combined_output_files(self):
+        """
+        Generates all_test_cases.sql and all_test_cases_ext.sql
+        containing the model outputs, sorted ASC by test case name.
+        """
+        if not self.results_data:
+            return
+
+        # Sort test cases ASC by name
+        sorted_names = sorted(self.results_data.keys())
+
+        # Calculate total statistics
+        num_test_cases = len(self.results_data)
+        num_success = sum(1 for res in self.results_data.values() if res["success"])
+        num_errors = num_test_cases - num_success
+        total_time = sum(res["time_taken"] for res in self.results_data.values())
+        total_prompt_len = sum(res["prompt_length"] for res in self.results_data.values())
+        total_input_tokens = sum(res["input_tokens"] for res in self.results_data.values())
+        total_input_script_len = sum(res["input_script_len"] for res in self.results_data.values())
+        total_output_script_len = sum(res["output_script_len"] for res in self.results_data.values())
+
+        # Create all_test_cases.sql
+        combined_sql_path = self.output_dir / "all_test_cases.sql"
+        with open(combined_sql_path, 'w', encoding='utf-8') as f:
+            for name in sorted_names:
+                res = self.results_data[name]
+                f.write(f"-- {name}\n")
+                f.write(f"{res['output_sql']}\n")
+
+        # Create all_test_cases_ext.sql
+        combined_ext_sql_path = self.output_dir / "all_test_cases_ext.sql"
+        with open(combined_ext_sql_path, 'w', encoding='utf-8') as f:
+            # Add total statistics at the beginning
+            f.write("/*\n")
+            f.write(f"Number of Test Cases: {num_test_cases}\n")
+            f.write(f"Number of Success: {num_success}\n")
+            f.write(f"Number of Errors: {num_errors}\n")
+            f.write(f"Total Time Taken: {total_time:.4f}s\n")
+            f.write(f"Total Prompt Length: {total_prompt_len}\n")
+            f.write(f"Total Input Tokens: {total_input_tokens}\n")
+            f.write(f"Total Length of Input Script: {total_input_script_len}\n")
+            f.write(f"Total Length of Output Script: {total_output_script_len}\n")
+            f.write("========\n")
+            f.write("*/\n")
+
+            for name in sorted_names:
+                res = self.results_data[name]
+                f.write("/*\n")
+                f.write(res["log_content"])
+                f.write("\n")
+                f.write(res["original_sql"])
+                f.write("\n")
+                f.write("*/\n")
+                f.write("\n")
+                f.write(f"{res['output_sql']}\n")
 
 
 class HtmlCasesLoaded(TestCasesLoaded):
@@ -20,12 +239,16 @@ class HtmlCasesLoaded(TestCasesLoaded):
         self.output_folder = Path(output_folder)
         self.output_folder.mkdir(parents=True, exist_ok=True)
 
+        self.text_to_text_models: List[ModelFullInfo] = []
+        self.text_to_image_diffusion_models: List[ModelFullInfo] = []
+        self.image_to_text_ocr_models: List[ModelFullInfo] = []
+        self.text_image_to_text_nonocr_models: List[ModelFullInfo] = []
+
         self.test_cases_data = self._collect_existing_results()
         self.prompt_content = self._load_prompt()
         self.test_cases_data = self._load_html_cases()
         self.test_prompts = [tc["prompt"] for tc in self.test_cases_data]
         self.filenames = [tc["name"] for tc in self.test_cases_data]
-        self.collect_groups_of_data()
 
         # Create output folder structure
         # out_folder = f"out/folder_path" -> e.g. out/TestCases/Oracle/Basic
@@ -205,6 +428,104 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
         return tags
 
+    def _collect_models_of_interest(self, item: dict, sorted_tags: list):
+        model_info_data = item.get("model_info", {})
+        model_id = model_info_data.get("model_id", "") or ""
+        if not model_id:
+            return
+
+        file_path = item.get("file_path", "Unknown Path")
+        has_code = item.get("has_code", False)
+        size_str = item.get("size_str", "")
+        size_bytes_str = item.get("size_bytes_str", "")
+        size_bytes = int(size_bytes_str) if size_bytes_str.isdigit() else 0
+        size_range = self.get_size_range(size_bytes)
+        exact_tags = item.get("exact_tags", [])
+        exact_tags_lower = [t.lower() for t in exact_tags]
+
+        downloads = model_info_data.get("downloads", 0) or 0
+        likes = model_info_data.get("likes", 0) or 0
+
+        def escape_csv(val):
+            return str(val).replace('"', '""')
+
+        model_url = f"https://huggingface.co/{escape_csv(model_id)}" if model_id else ""
+
+        data = item.get("json", {})
+        model_size = str(data.get("model_size")) if data.get("model_size") is not None else ""
+        input_mods = data.get("input_modalities") or []
+        output_mods = data.get("output_modalities") or []
+        input_modalities = ",".join(str(m) for m in input_mods) if isinstance(input_mods, list) else ""
+        output_modalities = ",".join(str(m) for m in output_mods) if isinstance(output_mods, list) else ""
+
+        text_i = "1" if "Text" in input_mods else ""
+        image_i = "1" if "Image" in input_mods else ""
+        audio_i = "1" if "Audio" in input_mods else ""
+        video_i = "1" if "Video" in input_mods else ""
+
+        text_o = "1" if "Text" in output_mods else ""
+        image_o = "1" if "Image" in output_mods else ""
+        audio_o = "1" if "Audio" in output_mods else ""
+        video_o = "1" if "Video" in output_mods else ""
+        three_d_o = "1" if "3D" in output_mods else ""
+
+        def get_int_token(val):
+            if val is None:
+                return ""
+            try:
+                return str(int(val))
+            except (ValueError, TypeError):
+                return ""
+
+        input_tokens = get_int_token(data.get("input_tokens"))
+        output_tokens = get_int_token(data.get("output_tokens"))
+        code = data.get("code", "")
+
+        model_full_info = ModelFullInfo(
+            model_id=model_id,
+            file_path=file_path,
+            model_url=model_url,
+            has_code=has_code,
+            Size=size_str,
+            SizeRange=size_range,
+            input_modalities=input_modalities,
+            Text_I=text_i,
+            Image_I=image_i,
+            Audio_I=audio_i,
+            Video_I=video_i,
+            output_modalities=output_modalities,
+            Text_O=text_o,
+            Image_O=image_o,
+            Audio_O=audio_o,
+            Video_O=video_o,
+            three_d_O=three_d_o,
+            model_size=model_size,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            downloads=downloads,
+            likes=likes,
+            SizeB=size_bytes_str,
+            code=code,
+            sorted_tags=sorted_tags
+        )
+
+        input_mods_set = set(input_mods)
+        output_mods_set = set(output_mods)
+
+        if input_mods_set == {"Text"} and output_mods_set == {"Text"}:
+            self.text_to_text_models.append(model_full_info)
+
+        if input_mods_set == {"Text"} and output_mods_set == {"Image"} and "diffusers" in exact_tags_lower:
+            self.text_to_image_diffusion_models.append(model_full_info)
+
+        # Note: Corrected to Image->Text based on class name "image_to_text_ocr_models",
+        # as the prompt likely contained a copy-paste typo from the previous line.
+        if input_mods_set == {"Image"} and output_mods_set == {"Text"} and "ocr" in exact_tags_lower:
+            self.image_to_text_ocr_models.append(model_full_info)
+
+        if "Image" in input_mods_set and input_mods_set <= {"Text", "Image"} and output_mods_set == {"Text"} and "ocr" not in exact_tags_lower:
+            self.text_image_to_text_nonocr_models.append(model_full_info)
+
     def _collect_existing_results(self):
         html_files = self.collect_case_files()
         if not html_files:
@@ -246,10 +567,119 @@ class HtmlCasesLoaded(TestCasesLoaded):
                 tag_counts[tag_lower] = tag_counts.get(tag_lower, 0) + 1
             # ---------------------------------------------------
 
-            self.load_model_page(downloads, exact_tags, existing_data, likes, model_id, model_page_path, size_bytes_str,
-                                 size_str)
+            try:
+                # 1. Attempt to read and parse the JSON file
+                with open(model_page_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
 
-        top_tags, top_tags_set, sorted_tags = self.process_collected_tags(tag_counts)
+                # Determine has_code
+                has_code = False
+                code_field = data.get("code", "")
+                if isinstance(code_field, str) and len(code_field) > 50:
+                    has_code = True
+
+                # Append the parsed data with its file path
+                existing_data.append({
+                    "file_path": str(model_page_path),
+                    "json": data,
+                    "model_info": {
+                        "model_id": model_id,
+                        "downloads": downloads,
+                        "likes": likes
+                    },
+                    "has_code": has_code,
+                    "size_str": size_str,
+                    "size_bytes_str": size_bytes_str,
+                    "exact_tags": exact_tags
+                })
+
+            except json.JSONDecodeError as e:
+                # 2. Handle invalid JSON: Load as text and print
+                print(f"Warning: {model_page_path} is not valid JSON. Error: {e}")
+                print("Falling back to reading as raw text...")
+
+                try:
+                    with open(model_page_path, 'r', encoding='utf-8') as f:
+                        raw_text = f.read()
+
+                    print(f"\n--- Raw Content of {model_page_path} ---")
+                    print(raw_text)
+                    print("-" * 50 + "\n")
+
+                    # Append a fallback dictionary so the file is still tracked in your results
+                    existing_data.append({
+                        "file_path": str(model_page_path),
+                        "error": f"Invalid JSON: {str(e)}",
+                        "raw_content": raw_text,
+                        "model_info": {
+                            "model_id": model_id,
+                            "downloads": downloads,
+                            "likes": likes
+                        },
+                        "has_code": False,
+                        "size_str": size_str,
+                        "size_bytes_str": size_bytes_str,
+                        "exact_tags": exact_tags
+                    })
+                except Exception as read_err:
+                    print(f"Critical Error: Could not read {model_page_path} as text. {read_err}")
+                    existing_data.append({
+                        "file_path": str(model_page_path),
+                        "error": f"Read Error: {str(read_err)}",
+                        "model_info": {
+                            "model_id": model_id,
+                            "downloads": downloads,
+                            "likes": likes
+                        },
+                        "has_code": False,
+                        "size_str": size_str,
+                        "size_bytes_str": size_bytes_str,
+                        "exact_tags": exact_tags
+                    })
+
+            except Exception as e:
+                # Handle other potential file system errors (e.g., permissions)
+                print(f"Error: An unexpected error occurred while reading {model_page_path}: {e}")
+                existing_data.append({
+                    "file_path": str(model_page_path),
+                    "error": f"Unexpected Error: {str(e)}",
+                    "model_info": {
+                        "model_id": model_id,
+                        "downloads": downloads,
+                        "likes": likes
+                    },
+                    "has_code": False,
+                    "size_str": size_str,
+                    "size_bytes_str": size_bytes_str,
+                    "exact_tags": exact_tags
+                })
+
+        # ==========================================
+        # DETERMINE TOP TAGS
+        # ==========================================
+        sorted_tags = sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)
+        all_top_tags = [tag for tag, count in sorted_tags[:self.TOP_TAGS_COUNT]]
+
+        # Regex to match pattern: (word-){1,}to(-word){1,}
+        # Examples: text-to-image, image-text-to-text, text-image-to-3d-image
+        pattern = re.compile(r'^([a-z0-9]+-)+to(-[a-z0-9]+)+$')
+
+        group_to = []
+        group_other = []
+
+        for tag in all_top_tags:
+            if pattern.match(tag):
+                group_to.append(tag)
+            else:
+                group_other.append(tag)
+
+        # Sort both groups alphabetically
+        group_to.sort()
+        group_other.sort()
+
+        # Combine: "to" pattern tags first, then the rest
+        top_tags = group_to + group_other
+        top_tags_set = set(top_tags)
 
         # ==========================================
         # FINAL LOOP: Print Summary as CSV & Save to File
@@ -284,7 +714,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
             for row_num, item in enumerate(existing_data, start=1):
                 file_path = item.get("file_path", "Unknown Path")
                 model_info_data = item.get("model_info", {})
-                has_code = "1" if item.get("has_code", False) else ""
+                has_code = item.get("has_code", False)
 
                 # Extract newly added size fields
                 size_str = item.get("size_str", "")
@@ -364,10 +794,31 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
                 # print(row)
                 csv_file.write(row + '\n')
-                self._collect_models_of_interest(model_url, model_id, data, item, sorted_tags)
+
+                # Collect models of interest
+                self._collect_models_of_interest(item, sorted_tags)
 
         print("=" * 120)
         print(f"Processing complete. CSV saved to {csv_file_path}")
+
+        # ==========================================
+        # PRINT COLLECTIONS OF INTEREST
+        # ==========================================
+        print("\n" + "=" * 80)
+        print("COLLECTIONS OF INTEREST")
+        print("=" * 80)
+
+        print(f"\n1. text_to_text_models ({len(self.text_to_text_models)} models):")
+        print([m.model_id for m in self.text_to_text_models])
+
+        print(f"\n2. text_to_image_diffusion_models ({len(self.text_to_image_diffusion_models)} models):")
+        print([m.model_id for m in self.text_to_image_diffusion_models])
+
+        print(f"\n3. image_to_text_ocr_models ({len(self.image_to_text_ocr_models)} models):")
+        print([m.model_id for m in self.image_to_text_ocr_models])
+
+        print(f"\n4. text_image_to_text_nonocr_models ({len(self.text_image_to_text_nonocr_models)} models):")
+        print([m.model_id for m in self.text_image_to_text_nonocr_models])
 
         # ==========================================
         # PRINT TAG STATISTICS
@@ -375,131 +826,12 @@ class HtmlCasesLoaded(TestCasesLoaded):
         if tag_counts:
             print("\n🏷️ TAG STATISTICS (Sorted by frequency)")
             print("-" * 40)
-            sorted_tags = sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)
-            for i, (tag, count) in enumerate(sorted_tags):
+            sorted_tags_print = sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)
+            for i, (tag, count) in enumerate(sorted_tags_print):
                 print(f"{i:>6} {tag}: {count}")
         else:
             print("\n🏷️ No tags found.")
             print("\n🏷️ tags printed.")
-
-    def process_collected_tags(self, tag_counts: dict[Any, Any]) -> tuple[list[Any], set[Any]]:
-        # ==========================================
-        # DETERMINE TOP TAGS
-        # ==========================================
-        sorted_tags = sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)
-        all_top_tags = [tag for tag, count in sorted_tags[:self.TOP_TAGS_COUNT]]
-
-        # Regex to match pattern: (word-){1,}to(-word){1,}
-        # Examples: text-to-image, image-text-to-text, text-image-to-3d-image
-        pattern = re.compile(r'^([a-z0-9]+-)+to(-[a-z0-9]+)+$')
-
-        group_to = []
-        group_other = []
-
-        for tag in all_top_tags:
-            if pattern.match(tag):
-                group_to.append(tag)
-            else:
-                group_other.append(tag)
-
-        # Sort both groups alphabetically
-        group_to.sort()
-        group_other.sort()
-
-        # Combine: "to" pattern tags first, then the rest
-        top_tags = group_to + group_other
-        top_tags_set = set(top_tags)
-        return top_tags, top_tags_set, sorted_tags
-
-    def load_model_page(self, downloads: int | Any, exact_tags: list[str], existing_data: list[Any], likes: int | Any,
-                        model_id: str | Any, model_page_path, size_bytes_str: str, size_str: str):
-        try:
-            # 1. Attempt to read and parse the JSON file
-            with open(model_page_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            # Determine has_code
-            has_code = False
-            code_field = data.get("code", "")
-            if isinstance(code_field, str) and len(code_field) > 50:
-                has_code = True
-
-            # Append the parsed data with its file path
-            existing_data.append({
-                "file_path": str(model_page_path),
-                "json": data,
-                "model_info": {
-                    "model_id": model_id,
-                    "downloads": downloads,
-                    "likes": likes
-                },
-                "has_code": has_code,
-                "code": code_field,
-                "size_str": size_str,
-                "size_bytes_str": size_bytes_str,
-                "exact_tags": exact_tags
-            })
-
-        except json.JSONDecodeError as e:
-            # 2. Handle invalid JSON: Load as text and print
-            print(f"Warning: {model_page_path} is not valid JSON. Error: {e}")
-            print("Falling back to reading as raw text...")
-
-            try:
-                with open(model_page_path, 'r', encoding='utf-8') as f:
-                    raw_text = f.read()
-
-                print(f"\n--- Raw Content of {model_page_path} ---")
-                print(raw_text)
-                print("-" * 50 + "\n")
-
-                # Append a fallback dictionary so the file is still tracked in your results
-                existing_data.append({
-                    "file_path": str(model_page_path),
-                    "error": f"Invalid JSON: {str(e)}",
-                    "raw_content": raw_text,
-                    "model_info": {
-                        "model_id": model_id,
-                        "downloads": downloads,
-                        "likes": likes
-                    },
-                    "has_code": False,
-                    "size_str": size_str,
-                    "size_bytes_str": size_bytes_str,
-                    "exact_tags": exact_tags
-                })
-            except Exception as read_err:
-                print(f"Critical Error: Could not read {model_page_path} as text. {read_err}")
-                existing_data.append({
-                    "file_path": str(model_page_path),
-                    "error": f"Read Error: {str(read_err)}",
-                    "model_info": {
-                        "model_id": model_id,
-                        "downloads": downloads,
-                        "likes": likes
-                    },
-                    "has_code": False,
-                    "size_str": size_str,
-                    "size_bytes_str": size_bytes_str,
-                    "exact_tags": exact_tags
-                })
-
-        except Exception as e:
-            # Handle other potential file system errors (e.g., permissions)
-            print(f"Error: An unexpected error occurred while reading {model_page_path}: {e}")
-            existing_data.append({
-                "file_path": str(model_page_path),
-                "error": f"Unexpected Error: {str(e)}",
-                "model_info": {
-                    "model_id": model_id,
-                    "downloads": downloads,
-                    "likes": likes
-                },
-                "has_code": False,
-                "size_str": size_str,
-                "size_bytes_str": size_bytes_str,
-                "exact_tags": exact_tags
-            })
 
     def collect_case_files(self) -> list[Path]:
         html_files = sorted(self.folder_path.rglob("model_page.html"))
@@ -773,215 +1105,3 @@ class HtmlCasesLoaded(TestCasesLoaded):
         text = re.sub(r'\n{3,}', '\n', text)
 
         return text.strip()
-
-    def collect_groups_of_data(self):
-        pass
-
-    def _collect_models_of_interest(self, model_url, model_id,
-                                    data, existing_data_item, sorted_tags):
-        d = {
-            "text-to_text": """
-                LiquidAI/LFM2-1.2B
-                microsoft/Phi-4-mini-reasoning
-                nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF
-                prefeitura-rio/Rio-3.0-Open-Mini
-                prism-ml/Bonsai-8B-gguf
-                Qwen/Qwen2.5-0.5B-Instruct-GGUF
-                Qwen/Qwen2.5-1.5B
-                Qwen/Qwen2.5-1.5B-Instruct
-                Qwen/Qwen2.5-14B-Instruct-AWQ
-                Qwen/Qwen2.5-3B-Instruct
-                Qwen/Qwen2.5-3B-Instruct-AWQ
-                Qwen/Qwen2.5-7B-Instruct-AWQ
-                Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4
-                Qwen/Qwen3-0.6B
-                Qwen/Qwen3-0.6B-FP8
-                Qwen/Qwen3-1.7B
-                Qwen/Qwen3-1.7B-GGUF
-                Qwen/Qwen3-1.7B-GPTQ-Int8
-                Qwen/Qwen3-14B-AWQ
-                Qwen/Qwen3-4B
-                Qwen/Qwen3-4B-Thinking-2507
-                Qwen/Qwen3-4B-Thinking-2507-FP8
-                Qwen/Qwen3-8B-AWQ
-                Qwen/Qwen3-8B-FP8
-                unsloth/Phi-3.5-mini-instruct-bnb-4bit
-                unsloth/Qwen2.5-3B-Instruct-unsloth-bnb-4bit
-                unsloth/Qwen2.5-7B-Instruct-bnb-4bit
-                unsloth/SmolLM3-3B-Base
-                WeiboAI/VibeThinker-1.5B
-                WeiboAI/VibeThinker-3B
-            """,
-            "text-to_image": """
-                aleksa-codes/flux-ghibsky-illustration
-                ali-vilab/In-Context-LoRA
-                alvdansen/flux-koda
-                alvdansen/littletinies
-                amd/Nitro-E
-                deepghs/animefull-latest
-                DeverStyle/Ideogram-4.0-Loras
-                Dragonstalker/Pony_Diffusion_v6
-                dream-textures/texture-diffusion
-                Edweibin/flux-dev-nfsw
-                Efficient-Large-Model/SANA1.5_4.8B_1024px_diffusers
-                eniora/Juggernaut_XL_Ragnarok
-                Fictiverse/Stable_Diffusion_PaperCut_Model
-                fofr/sdxl-emoji
-                glif-loradex-trainer/bingbangboom_flux_surf
-                gokaygokay/Flux-White-Background-LoRA
-                GuangyuanSD/Z-Image-Re-Turbo-LoRA
-                hakurei/waifu-diffusion
-                ilkerzgi/krea-2-cel-shaded-daytime-anime-lora
-                ilkerzgi/krea-2-crimson-void-minimalist-lora
-                ilkerzgi/krea-2-faded-japanese-film-grain-lora
-                ilkerzgi/krea-2-flat-cel-anime-lora
-                ilkerzgi/krea-2-grainy-nineties-film-lora
-                jakedahn/flux-midsummer-blues
-                John6666/prefect-illustrious-xl-v3-sdxl
-                Jovie/Midjourney
-                Keltezaa/Dynamic_Pose_Uncensored
-                krea/Krea-2-LoRA-darkbrush
-                krea/Krea-2-LoRA-kidsdrawing
-                krea/Krea-2-LoRA-retroanime
-                krea/Krea-2-LoRA-softwatercolor
-                krea/Krea-2-LoRA-sunsetblur
-                krea/Krea-2-LoRA-vintagetarot
-                kudzueye/boreal-qwen-image
-                latent-consistency/lcm-lora-ssd-1b
-                lexa862/NSFWmodel
-                Limbicnation/pixel-art-lora
-                Luo-Yihong/yoso_pixart1024
-                MiniT2I/MiniT2I
-                mrcuddle/live2d-model-maker
-                multimodalart/flux-tarot-v1
-                multimodalart/isometric-skeumorphic-3d-bnb
-                multimodalart/ms-paint-drawing-flux
-                nerijs/pixel-art-xl
-                NO8D/Slider-toolkit-Klein4B
-                NovelAI/nai-anime-v2
-                openfree/flux-chatgpt-ghibli-lora
-                optimum-intel-internal-testing/stable-diffusion-3-tiny-random
-                optimum-intel-internal-testing/tiny-random-flux
-                optimum-intel-internal-testing/tiny-stable-diffusion-torch
-                ostris/ideogram_4_turbotime_lora
-                ostris/wan22_i2v_14b_orbit_shot_lora
-                ostris/z_image_turbo_childrens_drawings
-                pcuenq/pokemon-lora
-                philschmid/stable-diffusion-v1-4-endpoints
-                Photoroom/prxpixel-t2i
-                prism-ml/bonsai-image-ternary-4B-gemlite-2bit
-                prism-ml/bonsai-image-ternary-4B-mlx-2bit
-                prism-ml/bonsai-image-ternary-4B-unpacked
-                prithivMLmods/Fashion-Hut-Modeling-LoRA
-                prithivMLmods/Knitted-Character-Flux-LoRA
-                prithivMLmods/Retro-Pixel-Flux-LoRA
-                prompthero/openjourney
-                renderartist/Classic-Painting-Z-Image-Turbo-LoRA
-                renderartist/Saturday-Morning-Z-Image-Turbo
-                RomixERR/Pornmaster_v1-Z-Images-Turbo
-                RudySen/Krea2-realism-V1
-                SG161222/Realistic_Vision_V6.0_B1_noVAE
-                Shakker-Labs/AWPortrait-Z
-                Shakker-Labs/FLUX.1-dev-LoRA-add-details
-                Shakker-Labs/FLUX.1-dev-LoRA-Logo-Design
-                strangerzonehf/Flux-Midjourney-Mix2-LoRA
-                suayptalha/Z-Image-Turbo-Realism-LoRA
-                Svngoku/ancient-africans
-                TheAwakenOne/caricature
-                Ttio2/Z-Image-Turbo-Ghibli-Style
-                victor/Krea-2-LoRA-magritte
-                wavymulder/portraitplus
-                WhiteAiZ/Pony_diffusion_v6_diffusers_fp16
-                Wuli-art/Qwen-Image-2512-Turbo-LoRA
-                Wuli-art/Qwen-Image-2512-Turbo-LoRA-2-Steps
-                xey/sldr_flux_nsfw_v2-studio
-                XLabs-AI/flux-RealismLora
-            """,
-            "text-to_image": """
-                aleksa-codes/flux-ghibsky-illustration
-                ali-vilab/In-Context-LoRA
-                alvdansen/flux-koda
-                alvdansen/littletinies
-                amd/Nitro-E
-                deepghs/animefull-latest
-                DeverStyle/Ideogram-4.0-Loras
-                Dragonstalker/Pony_Diffusion_v6
-                dream-textures/texture-diffusion
-                Edweibin/flux-dev-nfsw
-                Efficient-Large-Model/SANA1.5_4.8B_1024px_diffusers
-                eniora/Juggernaut_XL_Ragnarok
-                Fictiverse/Stable_Diffusion_PaperCut_Model
-                fofr/sdxl-emoji
-                glif-loradex-trainer/bingbangboom_flux_surf
-                gokaygokay/Flux-White-Background-LoRA
-                GuangyuanSD/Z-Image-Re-Turbo-LoRA
-                hakurei/waifu-diffusion
-                ilkerzgi/krea-2-cel-shaded-daytime-anime-lora
-                ilkerzgi/krea-2-crimson-void-minimalist-lora
-                ilkerzgi/krea-2-faded-japanese-film-grain-lora
-                ilkerzgi/krea-2-flat-cel-anime-lora
-                ilkerzgi/krea-2-grainy-nineties-film-lora
-                jakedahn/flux-midsummer-blues
-                John6666/prefect-illustrious-xl-v3-sdxl
-                Jovie/Midjourney
-                Keltezaa/Dynamic_Pose_Uncensored
-                krea/Krea-2-LoRA-darkbrush
-                krea/Krea-2-LoRA-kidsdrawing
-                krea/Krea-2-LoRA-retroanime
-                krea/Krea-2-LoRA-softwatercolor
-                krea/Krea-2-LoRA-sunsetblur
-                krea/Krea-2-LoRA-vintagetarot
-                kudzueye/boreal-qwen-image
-                latent-consistency/lcm-lora-ssd-1b
-                lexa862/NSFWmodel
-                Limbicnation/pixel-art-lora
-                Luo-Yihong/yoso_pixart1024
-                MiniT2I/MiniT2I
-                mrcuddle/live2d-model-maker
-                multimodalart/flux-tarot-v1
-                multimodalart/isometric-skeumorphic-3d-bnb
-                multimodalart/ms-paint-drawing-flux
-                nerijs/pixel-art-xl
-                NO8D/Slider-toolkit-Klein4B
-                NovelAI/nai-anime-v2
-                openfree/flux-chatgpt-ghibli-lora
-                optimum-intel-internal-testing/stable-diffusion-3-tiny-random
-                optimum-intel-internal-testing/tiny-random-flux
-                optimum-intel-internal-testing/tiny-stable-diffusion-torch
-                ostris/ideogram_4_turbotime_lora
-                ostris/wan22_i2v_14b_orbit_shot_lora
-                ostris/z_image_turbo_childrens_drawings
-                pcuenq/pokemon-lora
-                philschmid/stable-diffusion-v1-4-endpoints
-                Photoroom/prxpixel-t2i
-                prism-ml/bonsai-image-ternary-4B-gemlite-2bit
-                prism-ml/bonsai-image-ternary-4B-mlx-2bit
-                prism-ml/bonsai-image-ternary-4B-unpacked
-                prithivMLmods/Fashion-Hut-Modeling-LoRA
-                prithivMLmods/Knitted-Character-Flux-LoRA
-                prithivMLmods/Retro-Pixel-Flux-LoRA
-                prompthero/openjourney
-                renderartist/Classic-Painting-Z-Image-Turbo-LoRA
-                renderartist/Saturday-Morning-Z-Image-Turbo
-                RomixERR/Pornmaster_v1-Z-Images-Turbo
-                RudySen/Krea2-realism-V1
-                SG161222/Realistic_Vision_V6.0_B1_noVAE
-                Shakker-Labs/AWPortrait-Z
-                Shakker-Labs/FLUX.1-dev-LoRA-add-details
-                Shakker-Labs/FLUX.1-dev-LoRA-Logo-Design
-                strangerzonehf/Flux-Midjourney-Mix2-LoRA
-                suayptalha/Z-Image-Turbo-Realism-LoRA
-                Svngoku/ancient-africans
-                TheAwakenOne/caricature
-                Ttio2/Z-Image-Turbo-Ghibli-Style
-                victor/Krea-2-LoRA-magritte
-                wavymulder/portraitplus
-                WhiteAiZ/Pony_diffusion_v6_diffusers_fp16
-                Wuli-art/Qwen-Image-2512-Turbo-LoRA
-                Wuli-art/Qwen-Image-2512-Turbo-LoRA-2-Steps
-                xey/sldr_flux_nsfw_v2-studio
-                XLabs-AI/flux-RealismLora
-            """
-        }
-        if model_id in d["text-to_image"]:
-            print(model_id)
