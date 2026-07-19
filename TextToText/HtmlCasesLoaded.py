@@ -249,7 +249,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
             self.load_model_page(downloads, exact_tags, existing_data, likes, model_id, model_page_path, size_bytes_str,
                                  size_str)
 
-        top_tags, top_tags_set = self.process_collected_tags(tag_counts)
+        top_tags, top_tags_set, sorted_tags = self.process_collected_tags(tag_counts)
 
         # ==========================================
         # FINAL LOOP: Print Summary as CSV & Save to File
@@ -364,6 +364,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
 
                 # print(row)
                 csv_file.write(row + '\n')
+                self._collect_models_of_interest(model_url, model_id, data, item, sorted_tags)
 
         print("=" * 120)
         print(f"Processing complete. CSV saved to {csv_file_path}")
@@ -408,7 +409,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
         # Combine: "to" pattern tags first, then the rest
         top_tags = group_to + group_other
         top_tags_set = set(top_tags)
-        return top_tags, top_tags_set
+        return top_tags, top_tags_set, sorted_tags
 
     def load_model_page(self, downloads: int | Any, exact_tags: list[str], existing_data: list[Any], likes: int | Any,
                         model_id: str | Any, model_page_path, size_bytes_str: str, size_str: str):
@@ -433,6 +434,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     "likes": likes
                 },
                 "has_code": has_code,
+                "code": code_field,
                 "size_str": size_str,
                 "size_bytes_str": size_bytes_str,
                 "exact_tags": exact_tags
@@ -773,36 +775,213 @@ class HtmlCasesLoaded(TestCasesLoaded):
         return text.strip()
 
     def collect_groups_of_data(self):
-        s = """
-LiquidAI/LFM2-1.2B
-microsoft/Phi-4-mini-reasoning
-nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF
-prefeitura-rio/Rio-3.0-Open-Mini
-prism-ml/Bonsai-8B-gguf
-Qwen/Qwen2.5-0.5B-Instruct-GGUF
-Qwen/Qwen2.5-1.5B
-Qwen/Qwen2.5-1.5B-Instruct
-Qwen/Qwen2.5-14B-Instruct-AWQ
-Qwen/Qwen2.5-3B-Instruct
-Qwen/Qwen2.5-3B-Instruct-AWQ
-Qwen/Qwen2.5-7B-Instruct-AWQ
-Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4
-Qwen/Qwen3-0.6B
-Qwen/Qwen3-0.6B-FP8
-Qwen/Qwen3-1.7B
-Qwen/Qwen3-1.7B-GGUF
-Qwen/Qwen3-1.7B-GPTQ-Int8
-Qwen/Qwen3-14B-AWQ
-Qwen/Qwen3-4B
-Qwen/Qwen3-4B-Thinking-2507
-Qwen/Qwen3-4B-Thinking-2507-FP8
-Qwen/Qwen3-8B-AWQ
-Qwen/Qwen3-8B-FP8
-unsloth/Phi-3.5-mini-instruct-bnb-4bit
-unsloth/Qwen2.5-3B-Instruct-unsloth-bnb-4bit
-unsloth/Qwen2.5-7B-Instruct-bnb-4bit
-unsloth/SmolLM3-3B-Base
-WeiboAI/VibeThinker-1.5B
-WeiboAI/VibeThinker-3B
-"""
         pass
+
+    def _collect_models_of_interest(self, model_url, model_id,
+                                    data, existing_data_item, sorted_tags):
+        d = {
+            "text-to_text": """
+                LiquidAI/LFM2-1.2B
+                microsoft/Phi-4-mini-reasoning
+                nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF
+                prefeitura-rio/Rio-3.0-Open-Mini
+                prism-ml/Bonsai-8B-gguf
+                Qwen/Qwen2.5-0.5B-Instruct-GGUF
+                Qwen/Qwen2.5-1.5B
+                Qwen/Qwen2.5-1.5B-Instruct
+                Qwen/Qwen2.5-14B-Instruct-AWQ
+                Qwen/Qwen2.5-3B-Instruct
+                Qwen/Qwen2.5-3B-Instruct-AWQ
+                Qwen/Qwen2.5-7B-Instruct-AWQ
+                Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4
+                Qwen/Qwen3-0.6B
+                Qwen/Qwen3-0.6B-FP8
+                Qwen/Qwen3-1.7B
+                Qwen/Qwen3-1.7B-GGUF
+                Qwen/Qwen3-1.7B-GPTQ-Int8
+                Qwen/Qwen3-14B-AWQ
+                Qwen/Qwen3-4B
+                Qwen/Qwen3-4B-Thinking-2507
+                Qwen/Qwen3-4B-Thinking-2507-FP8
+                Qwen/Qwen3-8B-AWQ
+                Qwen/Qwen3-8B-FP8
+                unsloth/Phi-3.5-mini-instruct-bnb-4bit
+                unsloth/Qwen2.5-3B-Instruct-unsloth-bnb-4bit
+                unsloth/Qwen2.5-7B-Instruct-bnb-4bit
+                unsloth/SmolLM3-3B-Base
+                WeiboAI/VibeThinker-1.5B
+                WeiboAI/VibeThinker-3B
+            """,
+            "text-to_image": """
+                aleksa-codes/flux-ghibsky-illustration
+                ali-vilab/In-Context-LoRA
+                alvdansen/flux-koda
+                alvdansen/littletinies
+                amd/Nitro-E
+                deepghs/animefull-latest
+                DeverStyle/Ideogram-4.0-Loras
+                Dragonstalker/Pony_Diffusion_v6
+                dream-textures/texture-diffusion
+                Edweibin/flux-dev-nfsw
+                Efficient-Large-Model/SANA1.5_4.8B_1024px_diffusers
+                eniora/Juggernaut_XL_Ragnarok
+                Fictiverse/Stable_Diffusion_PaperCut_Model
+                fofr/sdxl-emoji
+                glif-loradex-trainer/bingbangboom_flux_surf
+                gokaygokay/Flux-White-Background-LoRA
+                GuangyuanSD/Z-Image-Re-Turbo-LoRA
+                hakurei/waifu-diffusion
+                ilkerzgi/krea-2-cel-shaded-daytime-anime-lora
+                ilkerzgi/krea-2-crimson-void-minimalist-lora
+                ilkerzgi/krea-2-faded-japanese-film-grain-lora
+                ilkerzgi/krea-2-flat-cel-anime-lora
+                ilkerzgi/krea-2-grainy-nineties-film-lora
+                jakedahn/flux-midsummer-blues
+                John6666/prefect-illustrious-xl-v3-sdxl
+                Jovie/Midjourney
+                Keltezaa/Dynamic_Pose_Uncensored
+                krea/Krea-2-LoRA-darkbrush
+                krea/Krea-2-LoRA-kidsdrawing
+                krea/Krea-2-LoRA-retroanime
+                krea/Krea-2-LoRA-softwatercolor
+                krea/Krea-2-LoRA-sunsetblur
+                krea/Krea-2-LoRA-vintagetarot
+                kudzueye/boreal-qwen-image
+                latent-consistency/lcm-lora-ssd-1b
+                lexa862/NSFWmodel
+                Limbicnation/pixel-art-lora
+                Luo-Yihong/yoso_pixart1024
+                MiniT2I/MiniT2I
+                mrcuddle/live2d-model-maker
+                multimodalart/flux-tarot-v1
+                multimodalart/isometric-skeumorphic-3d-bnb
+                multimodalart/ms-paint-drawing-flux
+                nerijs/pixel-art-xl
+                NO8D/Slider-toolkit-Klein4B
+                NovelAI/nai-anime-v2
+                openfree/flux-chatgpt-ghibli-lora
+                optimum-intel-internal-testing/stable-diffusion-3-tiny-random
+                optimum-intel-internal-testing/tiny-random-flux
+                optimum-intel-internal-testing/tiny-stable-diffusion-torch
+                ostris/ideogram_4_turbotime_lora
+                ostris/wan22_i2v_14b_orbit_shot_lora
+                ostris/z_image_turbo_childrens_drawings
+                pcuenq/pokemon-lora
+                philschmid/stable-diffusion-v1-4-endpoints
+                Photoroom/prxpixel-t2i
+                prism-ml/bonsai-image-ternary-4B-gemlite-2bit
+                prism-ml/bonsai-image-ternary-4B-mlx-2bit
+                prism-ml/bonsai-image-ternary-4B-unpacked
+                prithivMLmods/Fashion-Hut-Modeling-LoRA
+                prithivMLmods/Knitted-Character-Flux-LoRA
+                prithivMLmods/Retro-Pixel-Flux-LoRA
+                prompthero/openjourney
+                renderartist/Classic-Painting-Z-Image-Turbo-LoRA
+                renderartist/Saturday-Morning-Z-Image-Turbo
+                RomixERR/Pornmaster_v1-Z-Images-Turbo
+                RudySen/Krea2-realism-V1
+                SG161222/Realistic_Vision_V6.0_B1_noVAE
+                Shakker-Labs/AWPortrait-Z
+                Shakker-Labs/FLUX.1-dev-LoRA-add-details
+                Shakker-Labs/FLUX.1-dev-LoRA-Logo-Design
+                strangerzonehf/Flux-Midjourney-Mix2-LoRA
+                suayptalha/Z-Image-Turbo-Realism-LoRA
+                Svngoku/ancient-africans
+                TheAwakenOne/caricature
+                Ttio2/Z-Image-Turbo-Ghibli-Style
+                victor/Krea-2-LoRA-magritte
+                wavymulder/portraitplus
+                WhiteAiZ/Pony_diffusion_v6_diffusers_fp16
+                Wuli-art/Qwen-Image-2512-Turbo-LoRA
+                Wuli-art/Qwen-Image-2512-Turbo-LoRA-2-Steps
+                xey/sldr_flux_nsfw_v2-studio
+                XLabs-AI/flux-RealismLora
+            """,
+            "text-to_image": """
+                aleksa-codes/flux-ghibsky-illustration
+                ali-vilab/In-Context-LoRA
+                alvdansen/flux-koda
+                alvdansen/littletinies
+                amd/Nitro-E
+                deepghs/animefull-latest
+                DeverStyle/Ideogram-4.0-Loras
+                Dragonstalker/Pony_Diffusion_v6
+                dream-textures/texture-diffusion
+                Edweibin/flux-dev-nfsw
+                Efficient-Large-Model/SANA1.5_4.8B_1024px_diffusers
+                eniora/Juggernaut_XL_Ragnarok
+                Fictiverse/Stable_Diffusion_PaperCut_Model
+                fofr/sdxl-emoji
+                glif-loradex-trainer/bingbangboom_flux_surf
+                gokaygokay/Flux-White-Background-LoRA
+                GuangyuanSD/Z-Image-Re-Turbo-LoRA
+                hakurei/waifu-diffusion
+                ilkerzgi/krea-2-cel-shaded-daytime-anime-lora
+                ilkerzgi/krea-2-crimson-void-minimalist-lora
+                ilkerzgi/krea-2-faded-japanese-film-grain-lora
+                ilkerzgi/krea-2-flat-cel-anime-lora
+                ilkerzgi/krea-2-grainy-nineties-film-lora
+                jakedahn/flux-midsummer-blues
+                John6666/prefect-illustrious-xl-v3-sdxl
+                Jovie/Midjourney
+                Keltezaa/Dynamic_Pose_Uncensored
+                krea/Krea-2-LoRA-darkbrush
+                krea/Krea-2-LoRA-kidsdrawing
+                krea/Krea-2-LoRA-retroanime
+                krea/Krea-2-LoRA-softwatercolor
+                krea/Krea-2-LoRA-sunsetblur
+                krea/Krea-2-LoRA-vintagetarot
+                kudzueye/boreal-qwen-image
+                latent-consistency/lcm-lora-ssd-1b
+                lexa862/NSFWmodel
+                Limbicnation/pixel-art-lora
+                Luo-Yihong/yoso_pixart1024
+                MiniT2I/MiniT2I
+                mrcuddle/live2d-model-maker
+                multimodalart/flux-tarot-v1
+                multimodalart/isometric-skeumorphic-3d-bnb
+                multimodalart/ms-paint-drawing-flux
+                nerijs/pixel-art-xl
+                NO8D/Slider-toolkit-Klein4B
+                NovelAI/nai-anime-v2
+                openfree/flux-chatgpt-ghibli-lora
+                optimum-intel-internal-testing/stable-diffusion-3-tiny-random
+                optimum-intel-internal-testing/tiny-random-flux
+                optimum-intel-internal-testing/tiny-stable-diffusion-torch
+                ostris/ideogram_4_turbotime_lora
+                ostris/wan22_i2v_14b_orbit_shot_lora
+                ostris/z_image_turbo_childrens_drawings
+                pcuenq/pokemon-lora
+                philschmid/stable-diffusion-v1-4-endpoints
+                Photoroom/prxpixel-t2i
+                prism-ml/bonsai-image-ternary-4B-gemlite-2bit
+                prism-ml/bonsai-image-ternary-4B-mlx-2bit
+                prism-ml/bonsai-image-ternary-4B-unpacked
+                prithivMLmods/Fashion-Hut-Modeling-LoRA
+                prithivMLmods/Knitted-Character-Flux-LoRA
+                prithivMLmods/Retro-Pixel-Flux-LoRA
+                prompthero/openjourney
+                renderartist/Classic-Painting-Z-Image-Turbo-LoRA
+                renderartist/Saturday-Morning-Z-Image-Turbo
+                RomixERR/Pornmaster_v1-Z-Images-Turbo
+                RudySen/Krea2-realism-V1
+                SG161222/Realistic_Vision_V6.0_B1_noVAE
+                Shakker-Labs/AWPortrait-Z
+                Shakker-Labs/FLUX.1-dev-LoRA-add-details
+                Shakker-Labs/FLUX.1-dev-LoRA-Logo-Design
+                strangerzonehf/Flux-Midjourney-Mix2-LoRA
+                suayptalha/Z-Image-Turbo-Realism-LoRA
+                Svngoku/ancient-africans
+                TheAwakenOne/caricature
+                Ttio2/Z-Image-Turbo-Ghibli-Style
+                victor/Krea-2-LoRA-magritte
+                wavymulder/portraitplus
+                WhiteAiZ/Pony_diffusion_v6_diffusers_fp16
+                Wuli-art/Qwen-Image-2512-Turbo-LoRA
+                Wuli-art/Qwen-Image-2512-Turbo-LoRA-2-Steps
+                xey/sldr_flux_nsfw_v2-studio
+                XLabs-AI/flux-RealismLora
+            """
+        }
+        if model_id in d["text-to_image"]:
+            print(model_id)

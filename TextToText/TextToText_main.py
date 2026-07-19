@@ -19,6 +19,7 @@ ALLOWED_MODELS = [
 ]
 
 
+
 def TextToText_main():
     root_folder = r"D:\AIs\Any-to-Any"
     manager = TextToTextModelFactory(root_folder)
@@ -42,6 +43,10 @@ def TextToText_main():
     ]:
         test_cases_loader = HtmlCasesLoaded(test_case_folder)
         apply_models_to_htmls(manager, models, test_cases_loader)
+        print(1)
+        # collect_model_categories(test_case_folder)
+        
+    
 
     if False:
         for test_case_folder in [r"TestCases/Oracle/Basic",
@@ -152,4 +157,7 @@ def collect_models_htmls_info(
         miner= KnowledgeMiner(manager, model_info, test_cases_loader)
         result = miner.run()
         results.append(result)
+
+def collect_model_categories(test_case_folder):
+    pass
 
