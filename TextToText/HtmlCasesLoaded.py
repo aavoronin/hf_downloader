@@ -170,7 +170,9 @@ class HtmlCasesLoaded(TestCasesLoaded):
         self.output_folder = Path(output_folder)
         self.output_folder.mkdir(parents=True, exist_ok=True)
 
-        self.text_to_text_models: List[ModelFullInfo] = []
+        self.text_to_text_models_small: List[ModelFullInfo] = []
+        self.text_to_text_models_medium: List[ModelFullInfo] = []
+        self.text_to_text_models_large: List[ModelFullInfo] = []
         self.text_to_image_diffusion_models: List[ModelFullInfo] = []
         self.image_to_text_ocr_models: List[ModelFullInfo] = []
         self.text_image_to_text_nonocr_models: List[ModelFullInfo] = []
@@ -296,7 +298,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
         size_bytes_for_range = int(size_bytes_str) if size_bytes_str and size_bytes_str.isdigit() else 0
         size_range = self.get_size_range(size_bytes_for_range)
 
-        # Limit model sizes to 20 Gb
         if size_bytes_for_range > 20 * 1024 ** 3:
             return
 
@@ -341,7 +342,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
         output_tokens = get_int_val(data.get("output_tokens"))
         code = data.get("code", "")
 
-        # Determine file paths
         model_page_json_path = file_path
         folder_path = Path(file_path).parent
         model_page_path = str(folder_path / "model_page.html")
@@ -388,17 +388,25 @@ class HtmlCasesLoaded(TestCasesLoaded):
         output_mods_set = set(output_mods)
 
         if input_mods_set == {"Text"} and output_mods_set == {"Text"}:
-            self.text_to_text_models.append(model_full_info)
+            if has_code and input_tokens is not None and output_tokens is not None and input_tokens >= 1024 * 8 and output_tokens >= 1024 * 2:
+                size_b = model_full_info.SizeB if model_full_info.SizeB is not None else 0
+                if size_b < 2 * 1024 ** 3:
+                    self.text_to_text_models_small.append(model_full_info)
+                elif size_b < 20 * 1024 ** 3:
+                    self.text_to_text_models_medium.append(model_full_info)
+                else:
+                    self.text_to_text_models_large.append(model_full_info)
 
-        if input_mods_set == {"Text"} and output_mods_set == {"Image"} and "diffusers" in exact_tags_lower:
-            self.text_to_image_diffusion_models.append(model_full_info)
+        if has_code:
+            if input_mods_set == {"Text"} and output_mods_set == {"Image"} and "diffusers" in exact_tags_lower:
+                self.text_to_image_diffusion_models.append(model_full_info)
 
-        if input_mods_set == {"Image"} and output_mods_set == {"Text"} and "ocr" in exact_tags_lower:
-            self.image_to_text_ocr_models.append(model_full_info)
+            if input_mods_set == {"Image"} and output_mods_set == {"Text"} and "ocr" in exact_tags_lower:
+                self.image_to_text_ocr_models.append(model_full_info)
 
-        if "Image" in input_mods_set and input_mods_set <= {"Text", "Image"} and output_mods_set == {
-            "Text"} and "ocr" not in exact_tags_lower:
-            self.text_image_to_text_nonocr_models.append(model_full_info)
+            if "Image" in input_mods_set and input_mods_set <= {"Text", "Image"} and output_mods_set == {
+                "Text"} and "ocr" not in exact_tags_lower:
+                self.text_image_to_text_nonocr_models.append(model_full_info)
 
     def _collect_existing_results(self):
         html_files = self.collect_case_files()
@@ -560,14 +568,13 @@ class HtmlCasesLoaded(TestCasesLoaded):
         print("=" * 120)
         print(f"Processing complete. CSV saved to {csv_file_path}")
 
-        # ==========================================
-        # PRINT AND WRITE COLLECTIONS OF INTEREST
-        # ==========================================
         print("\n" + "=" * 80)
         print("COLLECTIONS OF INTEREST")
         print("=" * 80)
 
-        self.print_collection("text_to_text_models", self.text_to_text_models)
+        self.print_collection("text_to_text_models_small", self.text_to_text_models_small)
+        self.print_collection("text_to_text_models_medium", self.text_to_text_models_medium)
+        self.print_collection("text_to_text_models_large", self.text_to_text_models_large)
         self.print_collection("text_to_image_diffusion_models", self.text_to_image_diffusion_models)
         self.print_collection("image_to_text_ocr_models", self.image_to_text_ocr_models)
         self.print_collection("text_image_to_text_nonocr_models", self.text_image_to_text_nonocr_models)
@@ -592,7 +599,7 @@ class HtmlCasesLoaded(TestCasesLoaded):
             f.write("=" * 80 + "\n\n")
 
             for i, m in enumerate(collection):
-                print(f"{i:>6}Saving info Model ID: {m.model_id}")
+                print(f"{i:>6} Saving info Model ID: {m.model_id}")
                 f.write(f"Model ID: {m.model_id}\n")
                 f.write(f"Model URL: {m.model_url}\n")
                 if m.input_tokens is not None:
@@ -601,7 +608,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     f.write(f"Output Tokens: {m.output_tokens}\n")
                 f.write("\n")
 
-                # Write text description of the model (from model_page.json)
                 if m.model_page_json_path and Path(m.model_page_json_path).exists():
                     try:
                         with open(m.model_page_json_path, 'r', encoding='utf-8') as jf:
@@ -615,7 +621,6 @@ class HtmlCasesLoaded(TestCasesLoaded):
                     except Exception:
                         pass
 
-                # Write model description text (html stripped)
                 if m.model_page_path and Path(m.model_page_path).exists():
                     try:
                         with open(m.model_page_path, 'r', encoding='utf-8') as hf:
@@ -685,6 +690,79 @@ class HtmlCasesLoaded(TestCasesLoaded):
                  "downloads": downloads, "likes": likes})
         cases.sort(key=lambda x: x["downloads"] + x["likes"] * 200, reverse=True)
         return cases
+
+    # =========================================================================
+    # FIXED: Explicitly accepts output_file_extension but IGNORES it to prevent .sql generation
+    # =========================================================================
+    def save_test_case_result(self, case_index: int, success: bool, output_text: str,
+                              time_taken: float, error_msg: str = "",
+                              prompt_text: str = "", input_script_len: int = 0,
+                              output_script_len: int = 0, model_max_tokens: str = "",
+                              model_name: str = "", output_file_extension: str = "sql"):
+        """
+        Saves the resulting file (model output) as .json or .txt and a log file
+        in the same folder as the original HTML file.
+        NOTE: output_file_extension is accepted for compatibility but IGNORED,
+        as HtmlCasesLoaded does not deal with .sql files.
+        """
+        if 0 <= case_index < len(self.test_cases_data):
+            case_data = self.test_cases_data[case_index]
+        else:
+            case_data = {"name": f"case_{case_index}", "path": None}
+
+        basename = case_data.get("name", f"case_{case_index}")
+        original_path = case_data.get("path")
+
+        # Determine target directory: same folder as the original HTML file
+        if original_path:
+            target_dir = Path(original_path).parent
+        else:
+            target_dir = self.output_dir
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. Save result as JSON or text (NEVER as .sql for HtmlCasesLoaded)
+        file_path = target_dir / f"{basename}.json"
+        try:
+            if not output_text:
+                raise ValueError("Empty output text")
+            parsed_data = json.loads(output_text)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            # Fallback to .txt if not valid JSON
+            file_path = target_dir / f"{basename}.txt"
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(output_text if output_text else "")
+
+        # 2. Save log file
+        log_file = target_dir / f"{basename}.log"
+        log_content = (
+            f"Test Case: {basename}\n"
+            f"Model: {model_name}\n"
+            f"Status: {'Success' if success else 'Failure'}\n"
+            f"Error: {error_msg if error_msg else 'None'}\n"
+            f"Time Taken: {time_taken:.4f}s\n"
+            f"Prompt Length: {len(prompt_text)}\n"
+            f"Input Tokens (Approx): {len(prompt_text)}\n"
+            f"Model Max Input/Output Tokens: {model_max_tokens}\n"
+            f"Length of Input Script: {input_script_len}\n"
+            f"Length of Output Script: {output_script_len}\n"
+        )
+        with open(log_file, 'w', encoding='utf-8') as f:
+            f.write(log_content)
+
+        # Store for potential combined outputs later
+        self.results_data[basename] = {
+            "log_content": log_content,
+            "output_text": output_text if output_text else "",
+            "success": success,
+            "time_taken": time_taken,
+            "prompt_length": len(prompt_text),
+            "input_script_len": input_script_len,
+            "output_script_len": output_script_len,
+            "original_path": str(original_path)
+        }
 
     def clean_html(self, html_content, html_file):
         soup = BeautifulSoup(html_content, 'html.parser')
